@@ -1,0 +1,15 @@
+# Xcode build artifacts
+Builds/MacOSX/build/
+Builds/MacOSX/*.xcodeproj/xcuserdata/
+Builds/MacOSX/*.xcodeproj/project.xcworkspace/xcuserdata/
+Builds/VisualStudio2026/.vs/
+Builds/VisualStudio2026/x64/
+Builds/VisualStudio2026/Win32/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# IDE
+*.swp
+.vscode/
