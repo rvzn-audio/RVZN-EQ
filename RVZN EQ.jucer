@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <JUCERPROJECT id="pfONLn" name="RVZN EQ" projectType="audioplug" useAppConfig="0"
-              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1">
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1"
+              pluginName="RVZN V1 EQ" pluginDesc="RVZN V1 EQ">
   <MAINGROUP id="I23dnE" name="RVZN EQ">
     <GROUP id="{EDFF8D9F-1CBB-1E6A-E52A-45774BBFB6D2}" name="Source">
       <FILE id="dtDtVI" name="PluginProcessor.cpp" compile="1" resource="0"

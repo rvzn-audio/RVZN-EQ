@@ -41,10 +41,10 @@
  #define JucePlugin_Enable_ARA             0
 #endif
 #ifndef  JucePlugin_Name
- #define JucePlugin_Name                   "RVZN EQ"
+ #define JucePlugin_Name                   "RVZN V1 EQ"
 #endif
 #ifndef  JucePlugin_Desc
- #define JucePlugin_Desc                   "RVZN EQ"
+ #define JucePlugin_Desc                   "RVZN V1 EQ"
 #endif
 #ifndef  JucePlugin_Manufacturer
  #define JucePlugin_Manufacturer           "yourcompany"
