@@ -8,11 +8,11 @@
     <key>CFBundleIconFile</key>
     <string></string>
     <key>CFBundleIdentifier</key>
-    <string>com.yourcompany.RVZNEQ</string>
+    <string>com.yourcompany.RVZNV1EQUALIZER</string>
     <key>CFBundleName</key>
-    <string>RVZN EQ</string>
+    <string>RVZN V1 EQUALIZER</string>
     <key>CFBundleDisplayName</key>
-    <string>RVZN EQ</string>
+    <string>RVZN V1 EQUALIZER</string>
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleSignature</key>
@@ -29,11 +29,11 @@
     <array>
       <dict>
         <key>name</key>
-        <string>yourcompany: RVZN EQ</string>
+        <string>yourcompany: RVZN V1 EQUALIZER</string>
         <key>description</key>
-        <string>RVZN EQ</string>
+        <string>RVZN V1 EQUALIZER</string>
         <key>factoryFunction</key>
-        <string>RVZNEQAUFactory</string>
+        <string>RVZNV1EQUALIZERAUFactory</string>
         <key>manufacturer</key>
         <string>Manu</string>
         <key>type</key>

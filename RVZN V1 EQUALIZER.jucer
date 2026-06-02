@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<JUCERPROJECT id="pfONLn" name="RVZN EQ" projectType="audioplug" useAppConfig="0"
-              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1"
-              pluginName="RVZN V1 EQ" pluginDesc="RVZN V1 EQ">
-  <MAINGROUP id="I23dnE" name="RVZN EQ">
-    <GROUP id="{EDFF8D9F-1CBB-1E6A-E52A-45774BBFB6D2}" name="Source">
+<JUCERPROJECT id="eqz100" name="RVZN V1 EQUALIZER" projectType="audioplug" useAppConfig="0"
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" pluginCode="Pfon" pluginManufacturerCode="Manu"
+              pluginName="RVZN V1 EQUALIZER" pluginDesc="RVZN V1 EQUALIZER">
+  <MAINGROUP id="eqz200" name="RVZN V1 EQUALIZER">
+    <GROUP id="{1A111111-1111-1111-1111-111111111111}" name="Source">
       <FILE id="dtDtVI" name="PluginProcessor.cpp" compile="1" resource="0"
             file="Source/PluginProcessor.cpp"/>
       <FILE id="lVdl5X" name="PluginProcessor.h" compile="0" resource="0"
@@ -41,8 +41,8 @@
   <EXPORTFORMATS>
     <VS2026 targetFolder="Builds/VisualStudio2026">
       <CONFIGURATIONS>
-        <CONFIGURATION isDebug="1" name="Debug" targetName="RVZN EQ"/>
-        <CONFIGURATION isDebug="0" name="Release" targetName="RVZN EQ"/>
+        <CONFIGURATION isDebug="1" name="Debug" targetName="RVZN V1 EQUALIZER"/>
+        <CONFIGURATION isDebug="0" name="Release" targetName="RVZN V1 EQUALIZER"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
         <MODULEPATH id="juce_analytics" path="../../JUCE/modules"/>
@@ -68,8 +68,8 @@
     </VS2026>
     <XCODE_MAC targetFolder="Builds/MacOSX">
       <CONFIGURATIONS>
-        <CONFIGURATION isDebug="1" name="Debug" targetName="RVZN EQ"/>
-        <CONFIGURATION isDebug="0" name="Release" targetName="RVZN EQ"/>
+        <CONFIGURATION isDebug="1" name="Debug" targetName="RVZN V1 EQUALIZER"/>
+        <CONFIGURATION isDebug="0" name="Release" targetName="RVZN V1 EQUALIZER"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
         <MODULEPATH id="juce_analytics" path="../../JUCE/modules"/>

@@ -31,7 +31,6 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <juce_javascript/juce_javascript.h>
-#include <juce_opengl/juce_opengl.h>
 #include <juce_osc/juce_osc.h>
 
 
@@ -48,7 +47,7 @@
 #if ! JUCE_DONT_DECLARE_PROJECTINFO
 namespace ProjectInfo
 {
-    const char* const  projectName    = "RVZN EQ";
+    const char* const  projectName    = "RVZN V1 EQUALIZER";
     const char* const  companyName    = "";
     const char* const  versionString  = "1.0.0";
     const int          versionNumber  = 0x10000;

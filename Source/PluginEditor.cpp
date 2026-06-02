@@ -1507,7 +1507,7 @@ void RVZNEQAudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour (RvznColours::textPrimary);
     g.drawText ("RVZN", 14, 0, 38, 36, juce::Justification::centredLeft);
     g.setColour (RvznColours::accentBlue);
-    g.drawText ("V1 EQ", 50, 0, 44, 36, juce::Justification::centredLeft);
+    g.drawText ("V1 EQUALIZER", 50, 0, 240, 36, juce::Justification::centredLeft);
 
     // Footer text  (inMeter: x=30..130  outMeter: x=W-220..W-120)
     g.setFont (juce::FontOptions (9.f));
@@ -1531,7 +1531,7 @@ void RVZNEQAudioProcessorEditor::resized()
     area.removeFromBottom (30); // footer (painted only, meters positioned separately)
 
     // Logo area on left (matches the "RVZN V1 EQ" text painted at x=14)
-    header.removeFromLeft (100);
+    header.removeFromLeft (150);
 
     // Right: gear (settings) | PRESETS — matched 14px right margin to logo's left margin
     header.removeFromRight (14);
