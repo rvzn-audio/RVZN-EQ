@@ -1,13 +1,19 @@
-#include "SecureStore.h"
-
-#if JUCE_MAC
+// Platform headers are included BEFORE "SecureStore.h" so that the Carbon-
+// era ::Point typedef in <MacTypes.h> (pulled in via CoreFoundation) lands
+// in scope before juce::Point - otherwise the two collide.
+#if defined (__APPLE__)
  #include <Security/Security.h>
  #include <CoreFoundation/CoreFoundation.h>
-#elif JUCE_WINDOWS
+#elif defined (_WIN32)
+ #ifndef NOMINMAX
+  #define NOMINMAX
+ #endif
  #include <windows.h>
  #include <wincred.h>
  #pragma comment(lib, "Advapi32.lib")
 #endif
+
+#include "SecureStore.h"
 
 namespace rvzn { namespace license {
 

@@ -1,11 +1,17 @@
-#include "DeviceId.h"
-
-#if JUCE_MAC
+// Platform headers are included BEFORE "DeviceId.h" so that the Carbon-
+// era ::Point typedef in <MacTypes.h> (pulled in via CoreFoundation) lands
+// in scope before juce::Point - otherwise the two collide.
+#if defined (__APPLE__)
  #include <IOKit/IOKitLib.h>
  #include <CoreFoundation/CoreFoundation.h>
-#elif JUCE_WINDOWS
+#elif defined (_WIN32)
+ #ifndef NOMINMAX
+  #define NOMINMAX
+ #endif
  #include <windows.h>
 #endif
+
+#include "DeviceId.h"
 
 namespace rvzn { namespace license {
 
@@ -60,25 +66,14 @@ static juce::String readPlatformId()
 
 juce::String getDeviceId()
 {
-    juce::String raw = readPlatformId();
+    auto id = readPlatformId().trim();
 
-    if (raw.isEmpty())
-        raw = juce::SystemStats::getDeviceIdentifiers().joinIntoString (";");
-    if (raw.isEmpty())
-        raw = juce::SystemStats::getComputerName() + ";" + juce::SystemStats::getLogonName();
+    if (id.isEmpty())
+        id = juce::SystemStats::getDeviceIdentifiers().joinIntoString ("-");
+    if (id.isEmpty())
+        id = juce::SystemStats::getComputerName() + "-" + juce::SystemStats::getLogonName();
 
-    // Hash so the raw platform UUID never leaves the machine.
-    const juce::SHA256 hash (raw.toRawUTF8(), raw.getNumBytesAsUTF8());
-    auto hex = hash.toHexString();
-
-    // Format as 8-4-4-4-12 for readability on the server side.
-    if (hex.length() >= 32)
-    {
-        return hex.substring (0, 8) + "-" + hex.substring (8, 12) + "-"
-             + hex.substring (12, 16) + "-" + hex.substring (16, 20) + "-"
-             + hex.substring (20, 32);
-    }
-    return hex;
+    return id;
 }
 
 }} // namespace rvzn::license
