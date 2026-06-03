@@ -1651,6 +1651,7 @@ RVZNEQAudioProcessorEditor::RVZNEQAudioProcessorEditor (RVZNEQAudioProcessor& p)
         rvzn::license::Config::offlineGraceLaunches);
     licenseGate = std::make_unique<rvzn::license::LicenseGate> (*licenseManager);
     addAndMakeVisible (*licenseGate);
+    licenseGate->setBounds (getLocalBounds());
     licenseGate->toFront (false);
     licenseManager->startupVerify();
 }
