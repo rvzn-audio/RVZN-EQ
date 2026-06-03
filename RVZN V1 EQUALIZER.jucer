@@ -12,6 +12,26 @@
       <FILE id="yzM0UZ" name="PluginEditor.cpp" compile="1" resource="0"
             file="Source/PluginEditor.cpp"/>
       <FILE id="xggF23" name="PluginEditor.h" compile="0" resource="0" file="Source/PluginEditor.h"/>
+      <GROUP id="{2B222222-2222-2222-2222-2222222222LI}" name="License">
+        <FILE id="lic001" name="LicenseConfig.h" compile="0" resource="0"
+              file="Source/License/LicenseConfig.h"/>
+        <FILE id="lic002" name="DeviceId.h" compile="0" resource="0"
+              file="Source/License/DeviceId.h"/>
+        <FILE id="lic003" name="DeviceId.cpp" compile="1" resource="0"
+              file="Source/License/DeviceId.cpp"/>
+        <FILE id="lic004" name="SecureStore.h" compile="0" resource="0"
+              file="Source/License/SecureStore.h"/>
+        <FILE id="lic005" name="SecureStore.cpp" compile="1" resource="0"
+              file="Source/License/SecureStore.cpp"/>
+        <FILE id="lic006" name="LicenseManager.h" compile="0" resource="0"
+              file="Source/License/LicenseManager.h"/>
+        <FILE id="lic007" name="LicenseManager.cpp" compile="1" resource="0"
+              file="Source/License/LicenseManager.cpp"/>
+        <FILE id="lic008" name="LicenseGate.h" compile="0" resource="0"
+              file="Source/License/LicenseGate.h"/>
+        <FILE id="lic009" name="LicenseGate.cpp" compile="1" resource="0"
+              file="Source/License/LicenseGate.cpp"/>
+      </GROUP>
     </GROUP>
   </MAINGROUP>
   <MODULES>

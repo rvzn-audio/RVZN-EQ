@@ -5,6 +5,9 @@
 #include "LookAndFeel/RvznLookAndFeel.h"
 #include "LookAndFeel/RvznSettings.h"
 #include "UI/MeterComponent.h"
+#include "License/LicenseConfig.h"
+#include "License/LicenseManager.h"
+#include "License/LicenseGate.h"
 
 //==============================================================================
 class BandPopupPanel;
@@ -214,6 +217,10 @@ private:
 
     // ---- Tooltip ----
     juce::TooltipWindow tooltipWindow { this, 700 };
+
+    // License gate overlays the entire editor until the plugin is verified.
+    std::unique_ptr<rvzn::license::LicenseManager> licenseManager;
+    std::unique_ptr<rvzn::license::LicenseGate>    licenseGate;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RVZNEQAudioProcessorEditor)
 };

@@ -1641,6 +1641,18 @@ RVZNEQAudioProcessorEditor::RVZNEQAudioProcessorEditor (RVZNEQAudioProcessor& p)
     setResizeLimits (600, 320, 1600, 900);
 
     startTimerHz (60);
+
+    // License gate. Created last so it sits on top of all other children.
+    licenseManager = std::make_unique<rvzn::license::LicenseManager> (
+        rvzn::license::Config::productCode,
+        rvzn::license::Config::productName,
+        rvzn::license::Config::verifyUrl,
+        rvzn::license::Config::deactivateUrl,
+        rvzn::license::Config::offlineGraceLaunches);
+    licenseGate = std::make_unique<rvzn::license::LicenseGate> (*licenseManager);
+    addAndMakeVisible (*licenseGate);
+    licenseGate->toFront (false);
+    licenseManager->startupVerify();
 }
 
 RVZNEQAudioProcessorEditor::~RVZNEQAudioProcessorEditor()
@@ -1734,6 +1746,7 @@ void RVZNEQAudioProcessorEditor::resized()
     // Keep modals covering full editor
     if (presetModal   != nullptr) presetModal->setBounds (getLocalBounds());
     if (settingsModal != nullptr) settingsModal->setBounds (getLocalBounds());
+    if (licenseGate   != nullptr) licenseGate->setBounds  (getLocalBounds());
 
     // Footer meters: IN on left, OUT on right, labels painted separately
     auto footerBounds = getLocalBounds().removeFromBottom (30).reduced (0, 5);

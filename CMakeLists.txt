@@ -37,7 +37,21 @@ juce_generate_juce_header(RVZN_V1_EQUALIZER)
 
 target_sources(RVZN_V1_EQUALIZER PRIVATE
     Source/PluginProcessor.cpp
-    Source/PluginEditor.cpp)
+    Source/PluginEditor.cpp
+    Source/License/DeviceId.cpp
+    Source/License/SecureStore.cpp
+    Source/License/LicenseManager.cpp
+    Source/License/LicenseGate.cpp)
+
+if(APPLE)
+    find_library(SECURITY_FRAMEWORK Security)
+    find_library(IOKIT_FRAMEWORK    IOKit)
+    target_link_libraries(RVZN_V1_EQUALIZER PRIVATE
+        ${SECURITY_FRAMEWORK} ${IOKIT_FRAMEWORK})
+endif()
+if(WIN32)
+    target_link_libraries(RVZN_V1_EQUALIZER PRIVATE Advapi32)
+endif()
 
 target_compile_definitions(RVZN_V1_EQUALIZER PRIVATE
     JUCE_WEB_BROWSER=0
