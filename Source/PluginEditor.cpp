@@ -1713,21 +1713,25 @@ void RVZNEQAudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour (RvznColours::accentBlue);
     g.drawText ("V1 EQUALIZER", 50, 0, 240, 36, juce::Justification::centredLeft);
 
-    // Footer text. The right side is shifted in by 24px so the PHASE readout
-    // clears the resize-corner grabber. Layout mirrors resized():
-    //   outMeter right edge = W-144 (left = W-244), PHASE block = [W-144 .. W-24]
+    // Footer text. LATENCY + PHASE sit together as one group centred between the
+    // IN meter (ends at x=130) and the OUT label, leaving the bottom-right corner
+    // free for the LICENSED badge.
     g.setFont (juce::FontOptions (9.f));
     int fy = getHeight() - 30;
     g.setColour (RvznColours::textMuted);
     g.drawText ("IN",  8, fy, 22, 30, juce::Justification::centredLeft);
-    g.drawText ("OUT", getWidth() - 284, fy, 36, 30, juce::Justification::centredLeft);
-    int latencyCenter = (130 + getWidth() - 284) / 2;
+    g.drawText ("OUT", getWidth() - 252, fy, 36, 30, juce::Justification::centredLeft);
+
+    const int availL = 130;
+    const int availR = getWidth() - 256;
+    const int groupW = 220;
+    const int gx     = (availL + availR) / 2 - groupW / 2;
     g.setColour (RvznColours::textDim);
-    g.drawText ("LATENCY  0 ms", latencyCenter - 55, fy, 110, 30, juce::Justification::centred);
+    g.drawText ("LATENCY  0 ms", gx, fy, 100, 30, juce::Justification::centredLeft);
     g.setColour (RvznColours::textMuted);
-    g.drawText ("PHASE", getWidth() - 142, fy, 44, 30, juce::Justification::centredLeft);
+    g.drawText ("PHASE", gx + 112, fy, 44, 30, juce::Justification::centredLeft);
     g.setColour (RvznColours::accentBlue);
-    g.drawText ("MINIMUM", getWidth() - 96, fy, 66, 30, juce::Justification::centredLeft);
+    g.drawText ("MINIMUM", gx + 154, fy, 66, 30, juce::Justification::centredLeft);
 }
 
 void RVZNEQAudioProcessorEditor::resized()
@@ -1756,12 +1760,13 @@ void RVZNEQAudioProcessorEditor::resized()
     if (settingsModal != nullptr) settingsModal->setBounds (getLocalBounds());
     if (licenseGate   != nullptr) licenseGate->setBounds  (getLocalBounds());
 
-    // Footer meters: IN on left, OUT on right, labels painted separately
+    // Footer meters: IN on left, OUT on right, labels painted separately.
+    // The bottom-right corner is reserved for the "LICENSED" badge, so the OUT
+    // meter stops short of it and the PHASE readout lives in the centre.
     auto footerBounds = getLocalBounds().removeFromBottom (30).reduced (0, 5);
     footerBounds.removeFromLeft  (30);
     inMeter.setBounds  (footerBounds.removeFromLeft  (100));
-    footerBounds.removeFromRight (24);    // clearance for the resize-corner grabber
-    footerBounds.removeFromRight (120);   // PHASE value text (painted)
+    footerBounds.removeFromRight (112);   // LICENSED badge corner clearance
     outMeter.setBounds (footerBounds.removeFromRight (100));
 
     curveComp.setBounds (area);
