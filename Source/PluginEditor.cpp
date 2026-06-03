@@ -6,8 +6,17 @@ static juce::String bandParamID (int b, const char* name)
     return juce::String ("band") + juce::String (b) + "_" + name;
 }
 
-static const char* typeNames[]  = { "Bell","LoS","HiS","LP","HP","Ntch","BP" };
 static const char* slopeNames[] = { "6","12","18","24" };
+
+static const char* typeTooltips[] = {
+    "Bell - peak / dip at the centre frequency",
+    "Low Shelf - boost or cut below the corner frequency",
+    "High Shelf - boost or cut above the corner frequency",
+    "Low Pass - passes frequencies below the corner",
+    "High Pass - passes frequencies above the corner",
+    "Notch - sharp cut at the centre frequency",
+    "Band Pass - passes only frequencies around the centre"
+};
 
 static void styleLabel (juce::Label& l, const juce::String& text)
 {
@@ -90,7 +99,7 @@ void EQCurveComponent::timerCallback()
         plusVisible = false;
 
     // Panel morph animation
-    if (popup->isVisible() && panelIsOpening && panelMorphProgress < 1.0f)
+    if (popup->isVisible() && panelIsOpening && panelMorphProgress < 1.0f && !popup->userMoved)
     {
         panelMorphProgress = juce::jmin (1.0f, panelMorphProgress + 1.0f / 13.0f);
         float ease = elasticEaseOut (panelMorphProgress);
@@ -533,6 +542,7 @@ void EQCurveComponent::showPopupForBand (int band)
     panelMorphProgress = 0.0f;
     panelIsOpening   = true;
 
+    popup->userMoved = false;  // reset — opening for a band always re-positions automatically
     popup->setAlpha (0.0f);
     popup->showForBand (band, panelOriginPt);
     panelTargetH = popup->currentHeight();
@@ -548,6 +558,7 @@ void EQCurveComponent::dismissPopup()
 void EQCurveComponent::updatePopupPosition()
 {
     if (!popup->isVisible() || popup->currentBand < 0) return;
+    if (popup->userMoved) return;   // user has placed the panel manually — leave it alone
     int b = popup->currentBand;
     auto p = processor.getBandParams (b);
     bool pinnedY = (p.type == LowPass || p.type == HighPass
@@ -724,9 +735,10 @@ BandPopupPanel::BandPopupPanel (RVZNEQAudioProcessor& p) : processor (p)
 {
     setLookAndFeel (&laf);
 
-    // Band label
+    // Band label — non-interactive so the header drag passes through it
     bandLabel.setFont (juce::FontOptions (10.f));
     bandLabel.setColour (juce::Label::textColourId, RvznColours::textPrimary);
+    bandLabel.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (bandLabel);
 
     // Close button
@@ -770,13 +782,15 @@ BandPopupPanel::BandPopupPanel (RVZNEQAudioProcessor& p) : processor (p)
     addAndMakeVisible (gainLabel);
     addAndMakeVisible (qLabel);
 
-    // Type buttons
+    // Type buttons — drawn as filter-shape icons (see RvznLookAndFeel::drawFilterIcon)
     for (int i = 0; i < 7; ++i)
     {
-        typeBtn[i].setButtonText (typeNames[i]);
+        typeBtn[i].setButtonText ({});
         typeBtn[i].getProperties().set ("style", "filterType");
+        typeBtn[i].getProperties().set ("iconType", (juce::int64) i);
         typeBtn[i].getProperties().set ("accentColour", (juce::int64)RvznColours::accentBlue.getARGB());
         typeBtn[i].setClickingTogglesState (true);
+        typeBtn[i].setTooltip (typeTooltips[i]);
         typeBtn[i].onClick = [this, i] {
             auto* param = processor.apvts.getParameter (bandParamID (currentBand, "type"));
             if (param) param->setValueNotifyingHost (param->convertTo0to1 ((float)i));
@@ -963,6 +977,20 @@ void BandPopupPanel::paint (juce::Graphics& g)
         g.setColour (col);
         g.fillEllipse (10.f, (28.f - 8.f) * 0.5f, 8.f, 8.f);
     }
+
+    // Drag-handle dots — visual hint that the header is grabbable
+    {
+        const float cx = b.getWidth() * 0.5f;
+        const float cy = 14.f;
+        const float r  = 1.3f;
+        const float sp = 4.f;
+        g.setColour (RvznColours::textDim);
+        for (int i = -1; i <= 1; ++i)
+            for (int j = 0; j < 2; ++j)
+                g.fillEllipse (cx + i * sp - r,
+                               cy + (j == 0 ? -2.f : 2.f) - r,
+                               r * 2.f, r * 2.f);
+    }
 }
 
 void BandPopupPanel::resized()
@@ -1019,6 +1047,41 @@ void BandPopupPanel::resized()
         for (auto& sb : slopeBtn)
             sb.setBounds (slopeRow.removeFromLeft (sbW));
     }
+}
+
+void BandPopupPanel::mouseDown (const juce::MouseEvent& e)
+{
+    // Only initiate drag from the header strip.
+    if (e.y < kHeaderH)
+    {
+        isDraggingPanel   = true;
+        dragStartPanelPos = getBounds().getTopLeft();
+        dragStartMousePos = e.getEventRelativeTo (getParentComponent()).getPosition();
+        setMouseCursor (juce::MouseCursor::DraggingHandCursor);
+    }
+}
+
+void BandPopupPanel::mouseDrag (const juce::MouseEvent& e)
+{
+    if (! isDraggingPanel) return;
+
+    auto cur   = e.getEventRelativeTo (getParentComponent()).getPosition();
+    auto delta = cur - dragStartMousePos;
+
+    auto* par = getParentComponent();
+    int pw = par ? par->getWidth()  : 800;
+    int ph = par ? par->getHeight() : 500;
+
+    int nx = juce::jlimit (4, pw - getWidth()  - 4, dragStartPanelPos.x + delta.x);
+    int ny = juce::jlimit (4, ph - getHeight() - 4, dragStartPanelPos.y + delta.y);
+    setTopLeftPosition (nx, ny);
+    userMoved = true;
+}
+
+void BandPopupPanel::mouseUp (const juce::MouseEvent&)
+{
+    isDraggingPanel = false;
+    setMouseCursor (juce::MouseCursor::NormalCursor);
 }
 
 //==============================================================================

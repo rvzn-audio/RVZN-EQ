@@ -42,6 +42,93 @@ class RvznLookAndFeel : public juce::LookAndFeel_V4
 public:
     RvznLookAndFeel() = default;
 
+    // Draws a small EQ-response icon for filter-type buttons.
+    // type matches the FilterType enum: 0=Bell 1=LowShelf 2=HighShelf
+    // 3=LowPass 4=HighPass 5=Notch 6=BandPass
+    static void drawFilterIcon (juce::Graphics& g, juce::Rectangle<float> r,
+                                int type, juce::Colour colour)
+    {
+        const float pad = 4.f;
+        const float w   = r.getWidth()  - pad * 2.f;
+        const float h   = r.getHeight() - pad * 2.f;
+        const float x0  = r.getX() + pad;
+        const float y0  = r.getY() + pad;
+        const float mid = y0 + h * 0.5f;
+        const float hi  = y0 + h * 0.18f;
+        const float lo  = y0 + h * 0.82f;
+
+        juce::Path p;
+
+        switch (type)
+        {
+            case 0: // Bell
+                p.startNewSubPath (x0,                mid);
+                p.lineTo          (x0 + w * 0.20f,   mid);
+                p.quadraticTo     (x0 + w * 0.50f,   hi,
+                                   x0 + w * 0.80f,   mid);
+                p.lineTo          (x0 + w,           mid);
+                break;
+
+            case 1: // Low Shelf — boost at lows, flat above
+                p.startNewSubPath (x0,                hi);
+                p.lineTo          (x0 + w * 0.28f,   hi);
+                p.cubicTo         (x0 + w * 0.48f,   hi,
+                                   x0 + w * 0.48f,   mid,
+                                   x0 + w * 0.68f,   mid);
+                p.lineTo          (x0 + w,           mid);
+                break;
+
+            case 2: // High Shelf — flat at lows, boost above
+                p.startNewSubPath (x0,                mid);
+                p.lineTo          (x0 + w * 0.32f,   mid);
+                p.cubicTo         (x0 + w * 0.52f,   mid,
+                                   x0 + w * 0.52f,   hi,
+                                   x0 + w * 0.72f,   hi);
+                p.lineTo          (x0 + w,           hi);
+                break;
+
+            case 3: // Low Pass — flat then drop
+                p.startNewSubPath (x0,                mid);
+                p.lineTo          (x0 + w * 0.40f,   mid);
+                p.cubicTo         (x0 + w * 0.62f,   mid,
+                                   x0 + w * 0.68f,   lo,
+                                   x0 + w * 0.95f,   lo);
+                break;
+
+            case 4: // High Pass — drop then flat
+                p.startNewSubPath (x0 + w * 0.05f,   lo);
+                p.cubicTo         (x0 + w * 0.32f,   lo,
+                                   x0 + w * 0.38f,   mid,
+                                   x0 + w * 0.60f,   mid);
+                p.lineTo          (x0 + w,           mid);
+                break;
+
+            case 5: // Notch — sharp dip
+                p.startNewSubPath (x0,                mid);
+                p.lineTo          (x0 + w * 0.38f,   mid);
+                p.lineTo          (x0 + w * 0.50f,   lo);
+                p.lineTo          (x0 + w * 0.62f,   mid);
+                p.lineTo          (x0 + w,           mid);
+                break;
+
+            case 6: // Band Pass — peak in the middle from below
+                p.startNewSubPath (x0,                lo);
+                p.lineTo          (x0 + w * 0.28f,   lo);
+                p.quadraticTo     (x0 + w * 0.50f,   hi,
+                                   x0 + w * 0.72f,   lo);
+                p.lineTo          (x0 + w,           lo);
+                break;
+
+            default:
+                return;
+        }
+
+        g.setColour (colour);
+        g.strokePath (p, juce::PathStrokeType (1.3f,
+                          juce::PathStrokeType::curved,
+                          juce::PathStrokeType::rounded));
+    }
+
     //--------------------------------------------------------------------------
     void drawRotarySlider (juce::Graphics& g,
                            int x, int y, int width, int height,
@@ -234,6 +321,15 @@ public:
             auto v = props["accentColour"];
             if (v.isInt() || v.isInt64())
                 accent = juce::Colour (static_cast<juce::uint32> (static_cast<juce::int64> (v)));
+        }
+
+        // Filter-type icon override
+        if (props.contains ("iconType"))
+        {
+            int iconType = (int) static_cast<juce::int64> (props["iconType"]);
+            juce::Colour iconCol = active ? accent : RvznColours::textMuted;
+            drawFilterIcon (g, button.getLocalBounds().toFloat(), iconType, iconCol);
+            return;
         }
 
         juce::Colour textCol;

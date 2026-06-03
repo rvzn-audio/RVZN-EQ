@@ -117,13 +117,20 @@ public:
     void resized      () override;
     void timerCallback () override;
 
+    void mouseDown    (const juce::MouseEvent& e) override;
+    void mouseDrag    (const juce::MouseEvent& e) override;
+    void mouseUp      (const juce::MouseEvent& e) override;
+
     int currentBand    = -1;
     int lastParamCount = -1;
     std::function<void(int)> onRemoveBand;
 
     static constexpr int kW = 238;
+    static constexpr int kHeaderH = 28;
 
     int currentHeight () const;    // public so EQCurveComponent can query it
+
+    bool userMoved = false;   // true once the user drags the panel — disables auto-tracking
 
 private:
     RVZNEQAudioProcessor& processor;
@@ -157,6 +164,11 @@ private:
     bool showSlopeRow = false;
     void rebuildAttachments ();
     void updateButtonStates ();
+
+    // Drag state (header grab)
+    bool isDraggingPanel = false;
+    juce::Point<int> dragStartPanelPos;
+    juce::Point<int> dragStartMousePos;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BandPopupPanel)
 };
