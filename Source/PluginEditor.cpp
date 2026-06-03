@@ -6,7 +6,7 @@ static juce::String bandParamID (int b, const char* name)
     return juce::String ("band") + juce::String (b) + "_" + name;
 }
 
-static const char* slopeNames[] = { "6","12","18","24" };
+static const char* slopeNames[] = { "6","12","18","24","36","48" };
 
 static const char* typeTooltips[] = {
     "Bell - peak / dip at the centre frequency",
@@ -233,7 +233,6 @@ void EQCurveComponent::buildCurvePaths()
         juce::ReferenceCountedArray<Coeffs> arr;
         bool  enabled  = false;
         int   mode     = Stereo;
-        float postGain = 1.f;
     };
     std::array<BandCoeffs, NUM_BANDS> bc;
 
@@ -243,7 +242,6 @@ void EQCurveComponent::buildCurvePaths()
         auto p = processor.getBandParams (b);
         bc[b].enabled  = p.enabled;
         bc[b].mode     = p.mode;
-        bc[b].postGain = RVZNEQAudioProcessor::bandPostGain (p);
         if (!p.enabled) continue;
         bc[b].arr = RVZNEQAudioProcessor::buildBandCoefficients (p, sr);
         if (p.mode != Stereo) anyMS = true;
@@ -270,7 +268,7 @@ void EQCurveComponent::buildCurvePaths()
         for (int b = 0; b < NUM_BANDS; ++b)
         {
             if (!bc[b].enabled) continue;
-            double bandMag = (double) bc[b].postGain;
+            double bandMag = 1.0;
             for (auto* c : bc[b].arr)
                 bandMag *= c->getMagnitudeForFrequency ((double)freq, sr);
 
@@ -301,7 +299,6 @@ void EQCurveComponent::drawPerBandCurves (juce::Graphics& g)
         if (!p.enabled) continue;
 
         auto arr = RVZNEQAudioProcessor::buildBandCoefficients (p, sr);
-        const double postGain = (double) RVZNEQAudioProcessor::bandPostGain (p);
 
         const int numPoints = 256;
         juce::Path bandPath;
@@ -313,7 +310,7 @@ void EQCurveComponent::drawPerBandCurves (juce::Graphics& g)
             float freq = minFreq * std::pow (maxFreq / minFreq, t);
             float x    = getXForFreq (freq);
 
-            double mag = postGain;
+            double mag = 1.0;
             for (auto* c : arr)
                 mag *= c->getMagnitudeForFrequency ((double)freq, sr);
 
@@ -843,9 +840,10 @@ BandPopupPanel::BandPopupPanel (RVZNEQAudioProcessor& p) : processor (p)
     closeBtn.onClick = [this] { if (onClose) onClose(); };
     addAndMakeVisible (closeBtn);
 
-    // Delete button — removes the band entirely
-    deleteBtn.setButtonText ("DEL");
+    // Delete button — removes the band entirely (trash-can icon)
+    deleteBtn.setButtonText ({});
     deleteBtn.getProperties().set ("style", "header");
+    deleteBtn.getProperties().set ("glyph", "trash");
     deleteBtn.onClick = [this] { if (onRemoveBand) onRemoveBand (currentBand); };
     addAndMakeVisible (deleteBtn);
 
@@ -902,7 +900,7 @@ BandPopupPanel::BandPopupPanel (RVZNEQAudioProcessor& p) : processor (p)
     }
 
     // Slope buttons
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < kNumSlopes; ++i)
     {
         slopeBtn[i].setButtonText (juce::String (slopeNames[i]));
         slopeBtn[i].getProperties().set ("style", "filterType");
@@ -1024,10 +1022,10 @@ void BandPopupPanel::updateButtonStates()
 
     auto p = processor.getBandParams (currentBand);
     int  t = p.type;
-    int  s = p.slope - 1;
+    int  s = slopeIndexForOrder (p.slope);
 
-    for (int i = 0; i < 7; ++i) typeBtn[i].setToggleState  (i == t, juce::dontSendNotification);
-    for (int i = 0; i < 4; ++i) slopeBtn[i].setToggleState (i == s, juce::dontSendNotification);
+    for (int i = 0; i < 7; ++i)          typeBtn[i].setToggleState  (i == t, juce::dontSendNotification);
+    for (int i = 0; i < kNumSlopes; ++i) slopeBtn[i].setToggleState (i == s, juce::dontSendNotification);
 
     int m = p.mode;
     for (int i = 0; i < 3; ++i) modeBtn[i].setToggleState (i == m, juce::dontSendNotification);
@@ -1147,7 +1145,7 @@ void BandPopupPanel::resized()
         area.removeFromTop (4);
         auto slopeRow = area.removeFromTop (24);
         slopeLabel.setBounds (slopeRow.removeFromLeft (38));
-        int sbW = slopeRow.getWidth() / 4;
+        int sbW = slopeRow.getWidth() / kNumSlopes;
         for (auto& sb : slopeBtn)
             sb.setBounds (slopeRow.removeFromLeft (sbW));
     }
@@ -1715,19 +1713,21 @@ void RVZNEQAudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour (RvznColours::accentBlue);
     g.drawText ("V1 EQUALIZER", 50, 0, 240, 36, juce::Justification::centredLeft);
 
-    // Footer text  (inMeter: x=30..130  outMeter: x=W-220..W-120)
+    // Footer text. The right side is shifted in by 24px so the PHASE readout
+    // clears the resize-corner grabber. Layout mirrors resized():
+    //   outMeter right edge = W-144 (left = W-244), PHASE block = [W-144 .. W-24]
     g.setFont (juce::FontOptions (9.f));
     int fy = getHeight() - 30;
     g.setColour (RvznColours::textMuted);
     g.drawText ("IN",  8, fy, 22, 30, juce::Justification::centredLeft);
-    g.drawText ("OUT", getWidth() - 258, fy, 36, 30, juce::Justification::centredLeft);
-    int latencyCenter = (130 + getWidth() - 258) / 2;
+    g.drawText ("OUT", getWidth() - 284, fy, 36, 30, juce::Justification::centredLeft);
+    int latencyCenter = (130 + getWidth() - 284) / 2;
     g.setColour (RvznColours::textDim);
     g.drawText ("LATENCY  0 ms", latencyCenter - 55, fy, 110, 30, juce::Justification::centred);
     g.setColour (RvznColours::textMuted);
-    g.drawText ("PHASE", getWidth() - 116, fy, 44, 30, juce::Justification::centredLeft);
+    g.drawText ("PHASE", getWidth() - 142, fy, 44, 30, juce::Justification::centredLeft);
     g.setColour (RvznColours::accentBlue);
-    g.drawText ("MINIMUM", getWidth() - 72, fy, 66, 30, juce::Justification::centredLeft);
+    g.drawText ("MINIMUM", getWidth() - 96, fy, 66, 30, juce::Justification::centredLeft);
 }
 
 void RVZNEQAudioProcessorEditor::resized()
@@ -1760,7 +1760,8 @@ void RVZNEQAudioProcessorEditor::resized()
     auto footerBounds = getLocalBounds().removeFromBottom (30).reduced (0, 5);
     footerBounds.removeFromLeft  (30);
     inMeter.setBounds  (footerBounds.removeFromLeft  (100));
-    footerBounds.removeFromRight (120);   // PHASE LINEAR area
+    footerBounds.removeFromRight (24);    // clearance for the resize-corner grabber
+    footerBounds.removeFromRight (120);   // PHASE value text (painted)
     outMeter.setBounds (footerBounds.removeFromRight (100));
 
     curveComp.setBounds (area);

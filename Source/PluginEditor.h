@@ -152,8 +152,8 @@ private:
     // Filter type mini-buttons
     std::array<juce::TextButton, 7> typeBtn;
 
-    // Slope mini-buttons (6 12 18 24)
-    std::array<juce::TextButton, 4> slopeBtn;
+    // Slope mini-buttons (6 12 18 24 36 48 dB/oct)
+    std::array<juce::TextButton, kNumSlopes> slopeBtn;
     juce::Label slopeLabel;
 
     // M/S mode buttons

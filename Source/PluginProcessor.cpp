@@ -106,7 +106,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RVZNEQAudioProcessor::create
 
         layout.add (std::make_unique<juce::AudioParameterInt> (
             bandParamID (b, "slope"), "Band " + juce::String (b + 1) + " Slope",
-            0, 3, 1));  // 0=6dB, 1=12dB, 2=18dB, 3=24dB (index maps directly to combo)
+            0, kNumSlopes - 1, 1));  // index → slopeOrderForIndex: 6/12/18/24/36/48 dB/oct
 
         layout.add (std::make_unique<juce::AudioParameterBool> (
             bandParamID (b, "enabled"), "Band " + juce::String (b + 1) + " Enabled", false));
@@ -179,7 +179,7 @@ EQBandParams RVZNEQAudioProcessor::getBandParams (int b) const
     p.gainDb  = apvts.getRawParameterValue (bandParamID (b, "gain"))->load();
     p.q       = apvts.getRawParameterValue (bandParamID (b, "q"))->load();
     p.type    = (int) apvts.getRawParameterValue (bandParamID (b, "type"))->load();
-    p.slope   = (int) apvts.getRawParameterValue (bandParamID (b, "slope"))->load() + 1;
+    p.slope   = slopeOrderForIndex ((int) apvts.getRawParameterValue (bandParamID (b, "slope"))->load());
     p.enabled = apvts.getRawParameterValue (bandParamID (b, "enabled"))->load() > 0.5f;
     p.mode = (int) apvts.getRawParameterValue (bandParamID (b, "mode"))->load();
     return p;
@@ -196,14 +196,14 @@ void RVZNEQAudioProcessor::handleAsyncUpdate()
     // Runs on the message thread — allocations are OK here.
     // We build new coefficients into the pending slots under SpinLock so the
     // audio thread can swap them in atomically with try_lock.
-    std::array<std::array<IIRCoeffs::Ptr, 4>, NUM_BANDS> newCoeffs;
+    std::array<std::array<IIRCoeffs::Ptr, MAX_STAGES>, NUM_BANDS> newCoeffs;
     std::array<int, NUM_BANDS> newStages {};
 
     for (int b = 0; b < NUM_BANDS; ++b)
     {
         auto coeffs = buildBandCoefficients (getBandParams (b), currentSampleRate);
-        newStages[b] = coeffs.size();
-        for (int s = 0; s < 4; ++s)
+        newStages[b] = juce::jmin (coeffs.size(), MAX_STAGES);
+        for (int s = 0; s < MAX_STAGES; ++s)
             newCoeffs[b][s] = (s < coeffs.size()) ? coeffs[s] : nullptr;
     }
 
@@ -233,7 +233,7 @@ void RVZNEQAudioProcessor::applyPendingCoefficients()
 
         bands[b].activeStages = pendingActiveStages[b];
 
-        for (int s = 0; s < 4; ++s)
+        for (int s = 0; s < MAX_STAGES; ++s)
         {
             if (pendingCoeffs[b][s] != nullptr)
             {
@@ -303,15 +303,17 @@ RVZNEQAudioProcessor::buildBandCoefficients (const EQBandParams& p, double sr)
         case BandPass: result.add (Coeffs::makeBandPass (sr, f, q)); break;
         default: break;
     }
-    return result;
-}
 
-float RVZNEQAudioProcessor::bandPostGain (const EQBandParams& p) noexcept
-{
-    // Only low/high cut carry a passband gain (their coefficients are unity-gain).
-    if (p.type == LowPass || p.type == HighPass)
-        return juce::Decibels::decibelsToGain (p.gainDb);
-    return 1.0f;
+    // Dragging a low/high cut node vertically adds a resonance peak at the corner
+    // frequency: a peaking filter whose gain is the node's dB. The passband stays
+    // flat (the bell returns to 0 dB away from fc), so only a bump at fc appears.
+    if ((p.type == LowPass || p.type == HighPass) && std::abs (g) > 0.01f)
+    {
+        float resoQ = juce::jlimit (0.7f, 18.f, q);
+        result.add (Coeffs::makePeakFilter (sr, f, resoQ, juce::Decibels::decibelsToGain (g)));
+    }
+
+    return result;
 }
 
 void RVZNEQAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -446,30 +448,22 @@ void RVZNEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 int   stages = band.activeStages;
                 if (!p.enabled || stages == 0) continue;
 
-                const float bg = bandPostGain (p);
-
                 switch (p.mode)
                 {
                     case Stereo:
-                        for (int s = 0; s < stages && s < 4; ++s)
+                        for (int s = 0; s < stages && s < MAX_STAGES; ++s)
                         {
                             for (int i = 0; i < N; ++i) M[i] = band.filtersM[s].processSample (M[i]);
                             for (int i = 0; i < N; ++i) S[i] = band.filtersS[s].processSample (S[i]);
                         }
-                        if (bg != 1.0f)
-                            for (int i = 0; i < N; ++i) { M[i] *= bg; S[i] *= bg; }
                         break;
                     case Mid:
-                        for (int s = 0; s < stages && s < 4; ++s)
+                        for (int s = 0; s < stages && s < MAX_STAGES; ++s)
                             for (int i = 0; i < N; ++i) M[i] = band.filtersM[s].processSample (M[i]);
-                        if (bg != 1.0f)
-                            for (int i = 0; i < N; ++i) M[i] *= bg;
                         break;
                     case Side:
-                        for (int s = 0; s < stages && s < 4; ++s)
+                        for (int s = 0; s < stages && s < MAX_STAGES; ++s)
                             for (int i = 0; i < N; ++i) S[i] = band.filtersS[s].processSample (S[i]);
-                        if (bg != 1.0f)
-                            for (int i = 0; i < N; ++i) S[i] *= bg;
                         break;
                     default: break;
                 }
@@ -491,12 +485,8 @@ void RVZNEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 int   stages = band.activeStages;
                 if (!p.enabled || stages == 0) continue;
 
-                for (int s = 0; s < stages && s < 4; ++s)
+                for (int s = 0; s < stages && s < MAX_STAGES; ++s)
                     for (int i = 0; i < N; ++i) L[i] = band.filtersL[s].processSample (L[i]);
-
-                const float bg = bandPostGain (p);
-                if (bg != 1.0f)
-                    for (int i = 0; i < N; ++i) L[i] *= bg;
             }
         }
     }

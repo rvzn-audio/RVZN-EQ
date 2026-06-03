@@ -130,6 +130,38 @@ public:
     }
 
     //--------------------------------------------------------------------------
+    // Simple trash-can glyph, centred in the given bounds.
+    static void drawTrashIcon (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour colour)
+    {
+        auto box = r.withSizeKeepingCentre (11.f, 12.f);
+        const float x  = box.getX();
+        const float y  = box.getY();
+        const float w  = box.getWidth();
+        const float lidY  = y + 2.5f;     // top of the can body / under the lid
+        const float bodyB = box.getBottom();
+
+        g.setColour (colour);
+
+        // Lid (horizontal bar) + handle
+        g.fillRect (x - 0.5f, lidY - 1.2f, w + 1.f, 1.4f);
+        g.fillRect (x + w * 0.34f, y, w * 0.32f, 1.6f);   // handle nub
+
+        // Can body — slightly tapered, drawn as an outline
+        juce::Path body;
+        body.startNewSubPath (x + 0.8f,      lidY + 0.6f);
+        body.lineTo          (x + w - 0.8f,  lidY + 0.6f);
+        body.lineTo          (x + w - 1.6f,  bodyB);
+        body.lineTo          (x + 1.6f,      bodyB);
+        body.closeSubPath();
+        g.strokePath (body, juce::PathStrokeType (1.1f));
+
+        // Two vertical ribs
+        g.setColour (colour.withAlpha (0.8f));
+        g.fillRect (x + w * 0.40f, lidY + 2.4f, 0.9f, bodyB - lidY - 4.f);
+        g.fillRect (x + w * 0.60f, lidY + 2.4f, 0.9f, bodyB - lidY - 4.f);
+    }
+
+    //--------------------------------------------------------------------------
     void drawRotarySlider (juce::Graphics& g,
                            int x, int y, int width, int height,
                            float sliderPosProportional,
@@ -329,6 +361,15 @@ public:
             int iconType = (int) static_cast<juce::int64> (props["iconType"]);
             juce::Colour iconCol = active ? accent : RvznColours::textMuted;
             drawFilterIcon (g, button.getLocalBounds().toFloat(), iconType, iconCol);
+            return;
+        }
+
+        // Glyph icons (e.g. trash can on the band-delete button)
+        if (props.contains ("glyph") && props["glyph"].toString() == "trash")
+        {
+            bool hot = button.isMouseOver (true) || button.isMouseButtonDown();
+            drawTrashIcon (g, button.getLocalBounds().toFloat(),
+                           hot ? RvznColours::bypass : RvznColours::textMuted);
             return;
         }
 

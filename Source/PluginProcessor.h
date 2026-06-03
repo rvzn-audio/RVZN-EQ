@@ -5,8 +5,27 @@ static constexpr int NUM_BANDS = 8;
 static constexpr int FFT_ORDER = 12;
 static constexpr int FFT_SIZE  = 1 << FFT_ORDER;
 
+// Per-band biquad cascade depth. A 48 dB/oct cut uses 8 stages and may add one
+// more for the resonance peak, so we reserve 10.
+static constexpr int MAX_STAGES = 10;
+
 enum FilterType { Bell=0, LowShelf, HighShelf, LowPass, HighPass, Notch, BandPass, NumFilterTypes };
 enum ProcessMode { Stereo = 0, Mid, Side, NumProcessModes };
+
+// Low/high-cut slope choices, indexed by the "slope" parameter. The value is
+// the biquad order (each order = 6 dB/oct), so index N → (N+1)*6 dB/oct labels.
+static constexpr int kNumSlopes = 6;
+inline int slopeOrderForIndex (int idx) noexcept
+{
+    static const int orders[kNumSlopes] = { 1, 2, 3, 4, 6, 8 };  // 6,12,18,24,36,48 dB/oct
+    return orders[juce::jlimit (0, kNumSlopes - 1, idx)];
+}
+inline int slopeIndexForOrder (int order) noexcept
+{
+    static const int orders[kNumSlopes] = { 1, 2, 3, 4, 6, 8 };
+    for (int i = 0; i < kNumSlopes; ++i) if (orders[i] == order) return i;
+    return 1;
+}
 
 struct EQBandParams
 {
@@ -84,11 +103,6 @@ public:
     static juce::ReferenceCountedArray<juce::dsp::IIR::Coefficients<float>>
         buildBandCoefficients (const EQBandParams& p, double sampleRate);
 
-    // Flat gain applied to a band's output after its filter stages. Used so a
-    // low/high cut node can be dragged vertically: the gain shifts the passband
-    // up/down. Bell/Shelf bake gain into their coefficients, so they get unity.
-    static float bandPostGain (const EQBandParams& p) noexcept;
-
     juce::UndoManager undoManager;
     juce::AudioProcessorValueTreeState apvts;
     PresetManager presets;
@@ -122,10 +136,10 @@ private:
 
     struct Band
     {
-        std::array<IIRFilter, 4> filtersL;
-        std::array<IIRFilter, 4> filtersR;
-        std::array<IIRFilter, 4> filtersM;
-        std::array<IIRFilter, 4> filtersS;
+        std::array<IIRFilter, MAX_STAGES> filtersL;
+        std::array<IIRFilter, MAX_STAGES> filtersR;
+        std::array<IIRFilter, MAX_STAGES> filtersM;
+        std::array<IIRFilter, MAX_STAGES> filtersS;
         int  activeStages = 0;
     };
 
@@ -133,7 +147,7 @@ private:
 
     // Pending coefficients built on message thread, swapped under SpinLock
     juce::SpinLock coefficientsLock;
-    std::array<std::array<IIRCoeffs::Ptr, 4>, NUM_BANDS> pendingCoeffs;
+    std::array<std::array<IIRCoeffs::Ptr, MAX_STAGES>, NUM_BANDS> pendingCoeffs;
     std::array<int, NUM_BANDS>  pendingActiveStages {};
     std::atomic<bool> coefficientsPending { false };
 
