@@ -1,0 +1,143 @@
+name: Build Plugin
+
+on:
+  workflow_dispatch:
+
+env:
+  PRODUCT_NAME: "RVZN V1 EQUALIZER"
+  BUILD_TYPE: Release
+  JUCE_TAG: "8.0.4"
+
+jobs:
+  windows:
+    name: Windows (VST3)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache JUCE
+        id: cache-juce
+        uses: actions/cache@v4
+        with:
+          path: JUCE
+          key: juce-${{ env.JUCE_TAG }}-windows
+
+      - name: Clone JUCE
+        if: steps.cache-juce.outputs.cache-hit != 'true'
+        run: git clone --depth 1 --branch ${{ env.JUCE_TAG }} https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Configure
+        run: cmake -B build -DJUCE_PATH="${{ github.workspace }}/JUCE" -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -A x64
+
+      - name: Build VST3
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --target RVZN_V1_EQUALIZER_VST3 --parallel
+
+      - name: Stage artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifact
+          $vst3 = Get-ChildItem -Path build -Recurse -Filter "*.vst3" | Select-Object -First 1
+          if (-not $vst3) { Write-Error "No .vst3 produced"; exit 1 }
+          Copy-Item -Recurse $vst3.FullName "artifact/$($vst3.Name)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RVZN-EQUALIZER-Windows-VST3
+          path: artifact/*
+
+  macos:
+    name: macOS (VST3 + AU -> .pkg)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache JUCE
+        id: cache-juce
+        uses: actions/cache@v4
+        with:
+          path: JUCE
+          key: juce-${{ env.JUCE_TAG }}-macos
+
+      - name: Clone JUCE
+        if: steps.cache-juce.outputs.cache-hit != 'true'
+        run: git clone --depth 1 --branch ${{ env.JUCE_TAG }} https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Configure
+        run: cmake -B build -G "Xcode" -DJUCE_PATH="${{ github.workspace }}/JUCE" -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+
+      - name: Build VST3
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --target RVZN_V1_EQUALIZER_VST3 --parallel
+
+      - name: Build AU
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --target RVZN_V1_EQUALIZER_AU --parallel
+
+      - name: Locate built bundles
+        id: locate
+        run: |
+          set -e
+          VST3=$(find build -type d -name "*.vst3" -print -quit)
+          AU=$(find build -type d -name "*.component" -print -quit)
+          if [ -z "$VST3" ] || [ -z "$AU" ]; then
+            echo "Missing build outputs: VST3=$VST3 AU=$AU"; exit 1
+          fi
+          echo "vst3=$VST3" >> "$GITHUB_OUTPUT"
+          echo "au=$AU"   >> "$GITHUB_OUTPUT"
+
+      - name: Stage payloads
+        run: |
+          set -e
+          mkdir -p pkg-stage/vst3/Library/Audio/Plug-Ins/VST3
+          mkdir -p pkg-stage/au/Library/Audio/Plug-Ins/Components
+          cp -R "${{ steps.locate.outputs.vst3 }}" pkg-stage/vst3/Library/Audio/Plug-Ins/VST3/
+          cp -R "${{ steps.locate.outputs.au }}"   pkg-stage/au/Library/Audio/Plug-Ins/Components/
+
+      - name: Build component pkgs
+        run: |
+          set -e
+          mkdir -p pkg-out
+          pkgbuild \
+            --root pkg-stage/vst3 \
+            --identifier com.rvzn.eq.vst3 \
+            --version 1.0.0 \
+            --install-location / \
+            pkg-out/RVZN-EQ-VST3.pkg
+          pkgbuild \
+            --root pkg-stage/au \
+            --identifier com.rvzn.eq.au \
+            --version 1.0.0 \
+            --install-location / \
+            pkg-out/RVZN-EQ-AU.pkg
+
+      - name: Build distribution pkg
+        run: |
+          set -e
+          cat > distribution.xml <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <installer-gui-script minSpecVersion="2">
+              <title>RVZN V1 EQUALIZER</title>
+              <organization>com.rvzn</organization>
+              <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+              <options customize="always" require-scripts="false" hostArchitectures="x86_64,arm64"/>
+              <choices-outline>
+                  <line choice="vst3"/>
+                  <line choice="au"/>
+              </choices-outline>
+              <choice id="vst3" title="VST3" description="Install VST3 plug-in (/Library/Audio/Plug-Ins/VST3)">
+                  <pkg-ref id="com.rvzn.eq.vst3"/>
+              </choice>
+              <choice id="au" title="Audio Unit" description="Install AU plug-in (/Library/Audio/Plug-Ins/Components)">
+                  <pkg-ref id="com.rvzn.eq.au"/>
+              </choice>
+              <pkg-ref id="com.rvzn.eq.vst3" version="1.0.0" onConclusion="none">RVZN-EQ-VST3.pkg</pkg-ref>
+              <pkg-ref id="com.rvzn.eq.au"   version="1.0.0" onConclusion="none">RVZN-EQ-AU.pkg</pkg-ref>
+          </installer-gui-script>
+          EOF
+          productbuild \
+            --distribution distribution.xml \
+            --package-path pkg-out \
+            "RVZN V1 EQUALIZER.pkg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RVZN-EQUALIZER-macOS-Installer
+          path: "RVZN V1 EQUALIZER.pkg"

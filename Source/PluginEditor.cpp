@@ -76,7 +76,7 @@ void EQCurveComponent::timerCallback()
 
     // Spring physics for + button
     auto spring = [](float& pos, float& vel, float target) {
-        const float stiff = 0.18f, damp = 0.72f;
+        const float stiff = 0.22f, damp = 0.6f;
         vel += (target - pos) * stiff;
         vel *= damp;
         pos += vel;
@@ -683,6 +683,32 @@ void EQCurveComponent::mouseWheelMove (const juce::MouseEvent&, const juce::Mous
 
 void EQCurveComponent::mouseDoubleClick (const juce::MouseEvent& e)
 {
+    const float clickFreq = getFreqForX ((float)e.x);
+    const bool  inLowCut  = clickFreq < 50.f;
+    const bool  inHighCut = clickFreq > 18000.f;
+
+    if (inLowCut || inHighCut)
+    {
+        // The first click of the double-click already added a Bell band via
+        // mouseDown — convert it into the appropriate cut filter.
+        int hit = findHitNode ((float)e.x, (float)e.y);
+        if (hit < 0) hit = selectedBand;
+        if (hit < 0) return;
+
+        const FilterType newType = inLowCut ? HighPass : LowPass;
+        const float      newFreq = inLowCut ? 50.f     : 18000.f;
+
+        auto setP = [&] (const char* name, float v) {
+            auto* param = processor.apvts.getParameter (bandParamID (hit, name));
+            if (param) param->setValueNotifyingHost (param->convertTo0to1 (v));
+        };
+        setP ("type", (float) newType);
+        setP ("freq", newFreq);
+        setP ("gain", 0.f);
+        updatePopupPosition();
+        return;
+    }
+
     int hit = findHitNode ((float)e.x, (float)e.y);
     if (hit >= 0)
     {
