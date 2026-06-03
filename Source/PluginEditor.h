@@ -126,7 +126,8 @@ public:
 
     int currentBand    = -1;
     int lastParamCount = -1;
-    std::function<void(int)> onRemoveBand;
+    std::function<void(int)> onRemoveBand;   // delete button — removes the band
+    std::function<void()>    onClose;        // × button — just hides the panel
 
     static constexpr int kW = 238;
     static constexpr int kHeaderH = 28;
@@ -142,6 +143,7 @@ private:
 
     juce::Label       bandLabel;
     juce::TextButton  closeBtn;
+    juce::TextButton  deleteBtn;
 
     // Value sliders (Rotary)
     juce::Slider freqSlider, gainSlider, qSlider;

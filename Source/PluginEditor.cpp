@@ -37,6 +37,7 @@ EQCurveComponent::EQCurveComponent (RVZNEQAudioProcessor& p)
 
     popup = std::make_unique<BandPopupPanel> (p);
     popup->onRemoveBand = [this] (int b) { removeBand (b); };
+    popup->onClose      = [this] { dismissPopup(); };
     addChildComponent (*popup);
 
     startTimerHz (60);
@@ -230,8 +231,9 @@ void EQCurveComponent::buildCurvePaths()
     struct BandCoeffs
     {
         juce::ReferenceCountedArray<Coeffs> arr;
-        bool enabled = false;
-        int  mode    = Stereo;
+        bool  enabled  = false;
+        int   mode     = Stereo;
+        float postGain = 1.f;
     };
     std::array<BandCoeffs, NUM_BANDS> bc;
 
@@ -239,8 +241,9 @@ void EQCurveComponent::buildCurvePaths()
     for (int b = 0; b < NUM_BANDS; ++b)
     {
         auto p = processor.getBandParams (b);
-        bc[b].enabled = p.enabled;
-        bc[b].mode    = p.mode;
+        bc[b].enabled  = p.enabled;
+        bc[b].mode     = p.mode;
+        bc[b].postGain = RVZNEQAudioProcessor::bandPostGain (p);
         if (!p.enabled) continue;
         bc[b].arr = RVZNEQAudioProcessor::buildBandCoefficients (p, sr);
         if (p.mode != Stereo) anyMS = true;
@@ -267,7 +270,7 @@ void EQCurveComponent::buildCurvePaths()
         for (int b = 0; b < NUM_BANDS; ++b)
         {
             if (!bc[b].enabled) continue;
-            double bandMag = 1.0;
+            double bandMag = (double) bc[b].postGain;
             for (auto* c : bc[b].arr)
                 bandMag *= c->getMagnitudeForFrequency ((double)freq, sr);
 
@@ -298,6 +301,7 @@ void EQCurveComponent::drawPerBandCurves (juce::Graphics& g)
         if (!p.enabled) continue;
 
         auto arr = RVZNEQAudioProcessor::buildBandCoefficients (p, sr);
+        const double postGain = (double) RVZNEQAudioProcessor::bandPostGain (p);
 
         const int numPoints = 256;
         juce::Path bandPath;
@@ -309,7 +313,7 @@ void EQCurveComponent::drawPerBandCurves (juce::Graphics& g)
             float freq = minFreq * std::pow (maxFreq / minFreq, t);
             float x    = getXForFreq (freq);
 
-            double mag = 1.0;
+            double mag = postGain;
             for (auto* c : arr)
                 mag *= c->getMagnitudeForFrequency ((double)freq, sr);
 
@@ -412,8 +416,7 @@ void EQCurveComponent::drawNodes (juce::Graphics& g)
         bool sel     = (b == selectedBand);
         bool inGroup = isBandSelected (b);
         bool hovered = (b == hoveredBand);
-        bool pinnedY = (p.type == LowPass || p.type == HighPass
-                     || p.type == Notch   || p.type == BandPass);
+        bool pinnedY = (p.type == Notch || p.type == BandPass);
 
         float x   = getXForFreq (p.freq);
         float y   = pinnedY ? getYForGain (0.f) : getYForGain (p.gainDb);
@@ -522,8 +525,7 @@ int EQCurveComponent::findHitNode (float mx, float my) const
     {
         auto p = processor.getBandParams (b);
         if (!p.enabled) continue;
-        bool pinnedY = (p.type == LowPass || p.type == HighPass
-                     || p.type == Notch   || p.type == BandPass);
+        bool pinnedY = (p.type == Notch || p.type == BandPass);
         float x = getXForFreq (p.freq);
         float y = pinnedY ? getYForGain (0.f) : getYForGain (p.gainDb);
         float d = std::hypot (mx - x, my - y);
@@ -596,8 +598,7 @@ void EQCurveComponent::removeBand (int b)
 void EQCurveComponent::showPopupForBand (int band)
 {
     auto p = processor.getBandParams (band);
-    bool pinnedY = (p.type == LowPass || p.type == HighPass
-                 || p.type == Notch   || p.type == BandPass);
+    bool pinnedY = (p.type == Notch || p.type == BandPass);
     float nx = getXForFreq (p.freq);
     float ny = pinnedY ? getYForGain (0.f) : getYForGain (p.gainDb);
 
@@ -619,8 +620,7 @@ void EQCurveComponent::updatePopupPosition()
     if (popup->userMoved) return;   // user has placed the panel manually — leave it alone
     int b = popup->currentBand;
     auto p = processor.getBandParams (b);
-    bool pinnedY = (p.type == LowPass || p.type == HighPass
-                 || p.type == Notch   || p.type == BandPass);
+    bool pinnedY = (p.type == Notch || p.type == BandPass);
     float nx = getXForFreq (p.freq);
     float ny = pinnedY ? getYForGain (0.f) : getYForGain (p.gainDb);
     popup->showForBand (b, { (int)nx, (int)ny });
@@ -769,8 +769,7 @@ void EQCurveComponent::mouseUp (const juce::MouseEvent&)
             {
                 auto p = processor.getBandParams (b);
                 if (!p.enabled) continue;
-                bool pinnedY = (p.type == LowPass || p.type == HighPass
-                             || p.type == Notch   || p.type == BandPass);
+                bool pinnedY = (p.type == Notch || p.type == BandPass);
                 float nx = getXForFreq (p.freq);
                 float ny = pinnedY ? getYForGain (0.f) : getYForGain (p.gainDb);
                 if (nx >= x0 && nx <= x1 && ny >= y0 && ny <= y1)
@@ -838,11 +837,17 @@ BandPopupPanel::BandPopupPanel (RVZNEQAudioProcessor& p) : processor (p)
     bandLabel.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (bandLabel);
 
-    // Close button
+    // Close button (×) — just hides the panel, keeps the band
     closeBtn.setButtonText (juce::CharPointer_UTF8 ("\xc3\x97")); // ×
     closeBtn.getProperties().set ("style", "header");
-    closeBtn.onClick = [this] { if (onRemoveBand) onRemoveBand (currentBand); };
+    closeBtn.onClick = [this] { if (onClose) onClose(); };
     addAndMakeVisible (closeBtn);
+
+    // Delete button — removes the band entirely
+    deleteBtn.setButtonText ("DEL");
+    deleteBtn.getProperties().set ("style", "header");
+    deleteBtn.onClick = [this] { if (onRemoveBand) onRemoveBand (currentBand); };
+    addAndMakeVisible (deleteBtn);
 
     // Bypass toggle
     bypassToggle.setButtonText ("ON");
@@ -859,10 +864,11 @@ BandPopupPanel::BandPopupPanel (RVZNEQAudioProcessor& p) : processor (p)
     setupSlider (gainSlider);
     setupSlider (qSlider);
     freqSlider.setTooltip ("Center / corner frequency (Hz)");
-    gainSlider.setTooltip ("Gain (dB) — only used for Bell, Shelf");
+    gainSlider.setTooltip ("Gain (dB) — Bell, Shelf, and low/high cut passband level");
     qSlider.setTooltip    ("Q / resonance / steepness");
     bypassToggle.setTooltip ("Enable / bypass this band");
-    closeBtn.setTooltip     ("Remove this band");
+    closeBtn.setTooltip     ("Close this panel");
+    deleteBtn.setTooltip    ("Delete this band");
 
     freqSlider.getProperties().set ("accentColour", (juce::int64)RvznColours::accentBlue.getARGB());
     gainSlider.getProperties().set ("accentColour", (juce::int64)RvznColours::accentBlue.getARGB());
@@ -1097,7 +1103,8 @@ void BandPopupPanel::resized()
     // Header row (28px)
     auto header = area.removeFromTop (28);
     header.removeFromLeft (22); // dot space
-    bandLabel.setBounds (header.removeFromLeft (80));
+    bandLabel.setBounds (header.removeFromLeft (50));
+    deleteBtn.setBounds (header.removeFromLeft (32).withSizeKeepingCentre (30, 18));
     closeBtn.setBounds  (header.removeFromRight (24).withSizeKeepingCentre (20, 18));
     bypassToggle.setBounds (header.removeFromRight (50).withSizeKeepingCentre (46, 18));
 

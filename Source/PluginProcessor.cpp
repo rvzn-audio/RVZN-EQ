@@ -306,6 +306,14 @@ RVZNEQAudioProcessor::buildBandCoefficients (const EQBandParams& p, double sr)
     return result;
 }
 
+float RVZNEQAudioProcessor::bandPostGain (const EQBandParams& p) noexcept
+{
+    // Only low/high cut carry a passband gain (their coefficients are unity-gain).
+    if (p.type == LowPass || p.type == HighPass)
+        return juce::Decibels::decibelsToGain (p.gainDb);
+    return 1.0f;
+}
+
 void RVZNEQAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     currentSampleRate = sampleRate;
@@ -438,6 +446,8 @@ void RVZNEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 int   stages = band.activeStages;
                 if (!p.enabled || stages == 0) continue;
 
+                const float bg = bandPostGain (p);
+
                 switch (p.mode)
                 {
                     case Stereo:
@@ -446,14 +456,20 @@ void RVZNEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                             for (int i = 0; i < N; ++i) M[i] = band.filtersM[s].processSample (M[i]);
                             for (int i = 0; i < N; ++i) S[i] = band.filtersS[s].processSample (S[i]);
                         }
+                        if (bg != 1.0f)
+                            for (int i = 0; i < N; ++i) { M[i] *= bg; S[i] *= bg; }
                         break;
                     case Mid:
                         for (int s = 0; s < stages && s < 4; ++s)
                             for (int i = 0; i < N; ++i) M[i] = band.filtersM[s].processSample (M[i]);
+                        if (bg != 1.0f)
+                            for (int i = 0; i < N; ++i) M[i] *= bg;
                         break;
                     case Side:
                         for (int s = 0; s < stages && s < 4; ++s)
                             for (int i = 0; i < N; ++i) S[i] = band.filtersS[s].processSample (S[i]);
+                        if (bg != 1.0f)
+                            for (int i = 0; i < N; ++i) S[i] *= bg;
                         break;
                     default: break;
                 }
@@ -477,6 +493,10 @@ void RVZNEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
                 for (int s = 0; s < stages && s < 4; ++s)
                     for (int i = 0; i < N; ++i) L[i] = band.filtersL[s].processSample (L[i]);
+
+                const float bg = bandPostGain (p);
+                if (bg != 1.0f)
+                    for (int i = 0; i < N; ++i) L[i] *= bg;
             }
         }
     }

@@ -2,6 +2,9 @@
 
 <Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="RVZN V1 EQUALIZER\Source\License">
+      <UniqueIdentifier>{C45A22C6-9026-9510-3BD5-20033E849D95}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RVZN V1 EQUALIZER\Source">
       <UniqueIdentifier>{70BC4A86-AEF7-B74A-8306-4AA4A5D3112A}</UniqueIdentifier>
     </Filter>
@@ -792,6 +795,18 @@
     </ClCompile>
     <ClCompile Include="..\..\Source\PluginEditor.cpp">
       <Filter>RVZN V1 EQUALIZER\Source</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\License\DeviceId.cpp">
+      <Filter>RVZN V1 EQUALIZER\Source\License</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\License\SecureStore.cpp">
+      <Filter>RVZN V1 EQUALIZER\Source\License</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\License\LicenseManager.cpp">
+      <Filter>RVZN V1 EQUALIZER\Source\License</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\License\LicenseGate.cpp">
+      <Filter>RVZN V1 EQUALIZER\Source\License</Filter>
     </ClCompile>
     <ClCompile Include="C:\JUCE\modules\juce_analytics\analytics\juce_Analytics.cpp">
       <Filter>JUCE Modules\juce_analytics\analytics</Filter>
@@ -4061,6 +4076,21 @@
     </ClInclude>
     <ClInclude Include="..\..\Source\PluginEditor.h">
       <Filter>RVZN V1 EQUALIZER\Source</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\License\LicenseConfig.h">
+      <Filter>RVZN V1 EQUALIZER\Source\License</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\License\DeviceId.h">
+      <Filter>RVZN V1 EQUALIZER\Source\License</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\License\SecureStore.h">
+      <Filter>RVZN V1 EQUALIZER\Source\License</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\License\LicenseManager.h">
+      <Filter>RVZN V1 EQUALIZER\Source\License</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\License\LicenseGate.h">
+      <Filter>RVZN V1 EQUALIZER\Source\License</Filter>
     </ClInclude>
     <ClInclude Include="C:\JUCE\modules\juce_analytics\analytics\juce_Analytics.h">
       <Filter>JUCE Modules\juce_analytics\analytics</Filter>

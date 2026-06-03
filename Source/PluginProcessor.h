@@ -84,6 +84,11 @@ public:
     static juce::ReferenceCountedArray<juce::dsp::IIR::Coefficients<float>>
         buildBandCoefficients (const EQBandParams& p, double sampleRate);
 
+    // Flat gain applied to a band's output after its filter stages. Used so a
+    // low/high cut node can be dragged vertically: the gain shifts the passband
+    // up/down. Bell/Shelf bake gain into their coefficients, so they get unity.
+    static float bandPostGain (const EQBandParams& p) noexcept;
+
     juce::UndoManager undoManager;
     juce::AudioProcessorValueTreeState apvts;
     PresetManager presets;

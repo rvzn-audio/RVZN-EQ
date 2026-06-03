@@ -146,6 +146,10 @@
   <ItemGroup>
     <ClCompile Include="..\..\Source\PluginProcessor.cpp"/>
     <ClCompile Include="..\..\Source\PluginEditor.cpp"/>
+    <ClCompile Include="..\..\Source\License\DeviceId.cpp"/>
+    <ClCompile Include="..\..\Source\License\SecureStore.cpp"/>
+    <ClCompile Include="..\..\Source\License\LicenseManager.cpp"/>
+    <ClCompile Include="..\..\Source\License\LicenseGate.cpp"/>
     <ClCompile Include="C:\JUCE\modules\juce_analytics\analytics\juce_Analytics.cpp">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </ClCompile>
@@ -3220,6 +3224,11 @@
   <ItemGroup>
     <ClInclude Include="..\..\Source\PluginProcessor.h"/>
     <ClInclude Include="..\..\Source\PluginEditor.h"/>
+    <ClInclude Include="..\..\Source\License\LicenseConfig.h"/>
+    <ClInclude Include="..\..\Source\License\DeviceId.h"/>
+    <ClInclude Include="..\..\Source\License\SecureStore.h"/>
+    <ClInclude Include="..\..\Source\License\LicenseManager.h"/>
+    <ClInclude Include="..\..\Source\License\LicenseGate.h"/>
     <ClInclude Include="C:\JUCE\modules\juce_analytics\analytics\juce_Analytics.h"/>
     <ClInclude Include="C:\JUCE\modules\juce_analytics\analytics\juce_ButtonTracker.h"/>
     <ClInclude Include="C:\JUCE\modules\juce_analytics\destinations\juce_AnalyticsDestination.h"/>
