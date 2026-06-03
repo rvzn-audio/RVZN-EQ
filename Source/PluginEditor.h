@@ -44,13 +44,11 @@ private:
     void        drawCurve         (juce::Graphics& g);
     void        drawNodes         (juce::Graphics& g);
     void        drawPerBandCurves (juce::Graphics& g);
-    juce::Path  buildCurvePath    ();            // non-const — fills cached arrays
+    void        drawMSLegend      (juce::Graphics& g);
+    void        buildCurvePaths   ();            // fills cached paths + arrays
 
     float       getCurveYAtX  (float x) const;
     static float elasticEaseOut (float t) noexcept;
-
-    double computeBandMagnitude    (int band, double freq) const;
-    double computeTotalMagnitudeDb (double freq) const;
 
     int  findHitNode       (float x, float y) const;
     int  findFirstFreeBand () const;
@@ -67,15 +65,17 @@ private:
     float dragStartFreq = 0.f;
     float dragStartGain = 0.f;
 
-    // Rendering caches
-    juce::Path  cachedCurvePath;
+    // Rendering caches — Mid and Side are tracked separately so the curve can
+    // visually show which channels each band is processing.
+    juce::Path  cachedMidPath, cachedSidePath;
+    bool        cachedHasMS    = false;   // true when any band uses Mid or Side mode
     bool        curveDirty     = true;
     int         lastParamCount = -1;
     juce::Image gridImage;
     bool        gridDirty      = true;
 
-    // Cached curve sample positions (for getCurveYAtX)
-    std::vector<float> cachedCurveXs, cachedCurveYs;
+    // Cached curve sample positions (for getCurveYAtX — uses Mid as reference)
+    std::vector<float> cachedCurveXs, cachedCurveYs, cachedCurveSideYs;
 
     std::array<float, FFT_SIZE / 2> displaySpectrum {};
     std::unique_ptr<BandPopupPanel> popup;

@@ -61,7 +61,7 @@ void EQCurveComponent::timerCallback()
 
     if (curveDirty)
     {
-        cachedCurvePath = buildCurvePath();
+        buildCurvePaths();
         curveDirty = false;
         needRepaint = true;
     }
@@ -270,48 +270,40 @@ void EQCurveComponent::drawSpectrum (juce::Graphics& g)
     }
 }
 
-double EQCurveComponent::computeBandMagnitude (int band, double freq) const
-{
-    auto p = processor.getBandParams (band);
-    if (!p.enabled) return 1.0;
-
-    double sr = processor.currentSampleRate;
-    auto arr = RVZNEQAudioProcessor::buildBandCoefficients (p, sr);
-
-    double mag = 1.0;
-    for (auto* c : arr) mag *= c->getMagnitudeForFrequency (freq, sr);
-    return mag;
-}
-
-double EQCurveComponent::computeTotalMagnitudeDb (double freq) const
-{
-    double m = 1.0;
-    for (int b = 0; b < NUM_BANDS; ++b) m *= computeBandMagnitude (b, freq);
-    return juce::Decibels::gainToDecibels (m, -60.0);
-}
-
-juce::Path EQCurveComponent::buildCurvePath()
+void EQCurveComponent::buildCurvePaths()
 {
     double sr = processor.currentSampleRate;
 
     using Coeffs = juce::dsp::IIR::Coefficients<float>;
-    struct BandCoeffs { juce::ReferenceCountedArray<Coeffs> arr; bool enabled = false; };
+    struct BandCoeffs
+    {
+        juce::ReferenceCountedArray<Coeffs> arr;
+        bool enabled = false;
+        int  mode    = Stereo;
+    };
     std::array<BandCoeffs, NUM_BANDS> bc;
 
+    bool anyMS = false;
     for (int b = 0; b < NUM_BANDS; ++b)
     {
         auto p = processor.getBandParams (b);
         bc[b].enabled = p.enabled;
+        bc[b].mode    = p.mode;
         if (!p.enabled) continue;
         bc[b].arr = RVZNEQAudioProcessor::buildBandCoefficients (p, sr);
+        if (p.mode != Stereo) anyMS = true;
     }
+    cachedHasMS = anyMS;
 
     const int numPoints = 256;
-    juce::Path path;
+    cachedMidPath.clear();
+    cachedSidePath.clear();
     cachedCurveXs.clear();
     cachedCurveYs.clear();
-    cachedCurveXs.reserve ((size_t)numPoints);
-    cachedCurveYs.reserve ((size_t)numPoints);
+    cachedCurveSideYs.clear();
+    cachedCurveXs.reserve     ((size_t)numPoints);
+    cachedCurveYs.reserve     ((size_t)numPoints);
+    cachedCurveSideYs.reserve ((size_t)numPoints);
 
     for (int i = 0; i < numPoints; ++i)
     {
@@ -319,24 +311,29 @@ juce::Path EQCurveComponent::buildCurvePath()
         float freq = minFreq * std::pow (maxFreq / minFreq, t);
         float x    = getXForFreq (freq);
 
-        double mag = 1.0;
+        double magM = 1.0, magS = 1.0;
         for (int b = 0; b < NUM_BANDS; ++b)
         {
             if (!bc[b].enabled) continue;
+            double bandMag = 1.0;
             for (auto* c : bc[b].arr)
-                mag *= c->getMagnitudeForFrequency ((double)freq, sr);
+                bandMag *= c->getMagnitudeForFrequency ((double)freq, sr);
+
+            // Stereo affects both M and S; Mid only M; Side only S.
+            if (bc[b].mode == Stereo || bc[b].mode == Mid)  magM *= bandMag;
+            if (bc[b].mode == Stereo || bc[b].mode == Side) magS *= bandMag;
         }
 
-        float y = getYForGain ((float)juce::Decibels::gainToDecibels (mag, -60.0));
+        float yM = getYForGain ((float)juce::Decibels::gainToDecibels (magM, -60.0));
+        float yS = getYForGain ((float)juce::Decibels::gainToDecibels (magS, -60.0));
 
         cachedCurveXs.push_back (x);
-        cachedCurveYs.push_back (y);
+        cachedCurveYs.push_back (yM);
+        cachedCurveSideYs.push_back (yS);
 
-        if (i == 0) path.startNewSubPath (x, y);
-        else        path.lineTo (x, y);
+        if (i == 0) { cachedMidPath.startNewSubPath  (x, yM); cachedSidePath.startNewSubPath (x, yS); }
+        else        { cachedMidPath.lineTo (x, yM);            cachedSidePath.lineTo (x, yS); }
     }
-
-    return path;
 }
 
 void EQCurveComponent::drawPerBandCurves (juce::Graphics& g)
@@ -377,14 +374,80 @@ void EQCurveComponent::drawPerBandCurves (juce::Graphics& g)
 
 void EQCurveComponent::drawCurve (juce::Graphics& g)
 {
-    juce::Path fill = cachedCurvePath;
-    fill.lineTo ((float)getWidth(), getYForGain (0.f));
-    fill.lineTo (0.f, getYForGain (0.f));
-    fill.closeSubPath();
-    g.setColour (RvznColours::curveFill);
-    g.fillPath (fill);
+    const float w     = (float) getWidth();
+    const float yZero = getYForGain (0.f);
+
+    if (! cachedHasMS)
+    {
+        // No M/S processing — render the single combined curve as before.
+        juce::Path fill = cachedMidPath;
+        fill.lineTo (w, yZero);
+        fill.lineTo (0.f, yZero);
+        fill.closeSubPath();
+        g.setColour (RvznColours::curveFill);
+        g.fillPath (fill);
+        g.setColour (RvznColours::curveBlue);
+        g.strokePath (cachedMidPath, juce::PathStrokeType (1.5f));
+        return;
+    }
+
+    // M/S mode active — render both curves so it's visible which channels
+    // are being affected.
+    const auto midCol  = RvznColours::curveBlue;
+    const auto sideCol = RvznColours::accentEmerald;
+
+    // Mid: filled to baseline (subtle), then stroked.
+    juce::Path midFill = cachedMidPath;
+    midFill.lineTo (w, yZero);
+    midFill.lineTo (0.f, yZero);
+    midFill.closeSubPath();
+    g.setColour (midCol.withAlpha (0.10f));
+    g.fillPath (midFill);
+
+    // Side: dashed stroke so it visually reads as a different signal path.
+    g.setColour (sideCol.withAlpha (0.85f));
+    {
+        juce::Path dashed;
+        const float dashLengths[] = { 5.f, 3.f };
+        juce::PathStrokeType (1.4f).createDashedStroke (dashed, cachedSidePath, dashLengths, 2);
+        g.fillPath (dashed);
+    }
+
+    // Mid stroke on top so it stays prominent.
+    g.setColour (midCol);
+    g.strokePath (cachedMidPath, juce::PathStrokeType (1.5f));
+}
+
+void EQCurveComponent::drawMSLegend (juce::Graphics& g)
+{
+    if (! cachedHasMS) return;
+
+    const int   pad  = 8;
+    const int   w    = 96, h = 18;
+    const int   x    = getWidth() - w - pad;
+    const int   y    = pad;
+
+    g.setColour (juce::Colour (0xCC0D0F14));
+    g.fillRoundedRectangle ((float)x, (float)y, (float)w, (float)h, 4.f);
+    g.setColour (RvznColours::borderMid);
+    g.drawRoundedRectangle ((float)x, (float)y, (float)w, (float)h, 4.f, 1.f);
+
+    g.setFont (juce::FontOptions (9.f));
+
+    // Mid swatch — short solid line
+    const int sy = y + h / 2;
     g.setColour (RvznColours::curveBlue);
-    g.strokePath (cachedCurvePath, juce::PathStrokeType (1.5f));
+    g.drawLine ((float)(x + 8), (float)sy, (float)(x + 22), (float)sy, 1.6f);
+    g.setColour (RvznColours::textPrimary);
+    g.drawText ("MID", x + 26, y, 24, h, juce::Justification::centredLeft);
+
+    // Side swatch — dashed
+    const float dx0 = (float)(x + 54), dx1 = (float)(x + 68);
+    g.setColour (RvznColours::accentEmerald);
+    const float dashes[] = { 3.f, 2.f };
+    g.drawDashedLine ({ { dx0, (float)sy }, { dx1, (float)sy } }, dashes, 2, 1.4f);
+    g.setColour (RvznColours::textPrimary);
+    g.drawText ("SIDE", x + 72, y, 24, h, juce::Justification::centredLeft);
 }
 
 void EQCurveComponent::drawNodes (juce::Graphics& g)
@@ -434,6 +497,27 @@ void EQCurveComponent::drawNodes (juce::Graphics& g)
         g.drawText (juce::String (b + 1),
                     juce::roundToInt (x - 5), juce::roundToInt (y - 5),
                     10, 10, juce::Justification::centred);
+
+        // M / S badge — small pill above the node indicating the band only
+        // processes one channel of the M/S split.
+        if (p.mode == Mid || p.mode == Side)
+        {
+            const char* lbl = (p.mode == Mid) ? "M" : "S";
+            juce::Colour badgeCol = (p.mode == Mid)
+                ? RvznColours::curveBlue
+                : RvznColours::accentEmerald;
+
+            const float bw = 12.f, bh = 9.f;
+            const float bx = x - bw * 0.5f;
+            const float by = y - r - bh - 2.f;
+
+            g.setColour (badgeCol.withAlpha (0.92f));
+            g.fillRoundedRectangle (bx, by, bw, bh, 2.f);
+            g.setColour (juce::Colours::white);
+            g.setFont (juce::FontOptions (7.5f, juce::Font::bold));
+            g.drawText (lbl, (int) bx, (int) by, (int) bw, (int) bh,
+                        juce::Justification::centred);
+        }
     }
 }
 
@@ -445,6 +529,7 @@ void EQCurveComponent::paint (juce::Graphics& g)
     drawPerBandCurves (g);
     drawCurve (g);
     drawNodes (g);
+    drawMSLegend (g);
 
     // + button
     if (plusVisible && plusScale > 0.01f)
