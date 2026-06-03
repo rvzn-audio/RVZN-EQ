@@ -45,25 +45,40 @@ private:
     void        drawNodes         (juce::Graphics& g);
     void        drawPerBandCurves (juce::Graphics& g);
     void        drawMSLegend      (juce::Graphics& g);
+    void        drawLasso         (juce::Graphics& g);
     void        buildCurvePaths   ();            // fills cached paths + arrays
 
     float       getCurveYAtX  (float x) const;
-    static float elasticEaseOut (float t) noexcept;
 
     int  findHitNode       (float x, float y) const;
     int  findFirstFreeBand () const;
-    void addBandAt         (float freq, float gainDb);
+    void addBandAt         (float freq, float gainDb, FilterType type = Bell);
     void removeBand        (int band);
     void showPopupForBand  (int band);
     void dismissPopup      ();
 
-    int   selectedBand  = -1;
+    bool isBandSelected    (int b) const;
+    void selectOnly        (int b);
+    void clearSelection    ();
+
+    int   selectedBand  = -1;          // primary band — popup target / Q ring
     int   draggingBand  = -1;
     bool  isDragging    = false;
     int   hoveredBand   = -1;
     juce::Point<float> dragStartMouse;
     float dragStartFreq = 0.f;
     float dragStartGain = 0.f;
+
+    // Multi-selection (filled by lasso)
+    std::vector<int> selectedBands;
+
+    // Multi-drag — captured at mouseDown so the whole group moves with one delta
+    struct DragRef { int band; float startFreq; float startGain; };
+    std::vector<DragRef> multiDragRefs;
+
+    // Lasso selection rectangle (drag from empty area)
+    bool isLassoing = false;
+    juce::Point<float> lassoStart, lassoCurrent;
 
     // Rendering caches — Mid and Side are tracked separately so the curve can
     // visually show which channels each band is processing.
@@ -79,21 +94,6 @@ private:
 
     std::array<float, FFT_SIZE / 2> displaySpectrum {};
     std::unique_ptr<BandPopupPanel> popup;
-
-    // Spring-animated + hover button
-    juce::Point<float> plusPos     { 0.f, 0.f };
-    juce::Point<float> plusTarget  { 0.f, 0.f };
-    juce::Point<float> plusVel     { 0.f, 0.f };
-    float plusScale       = 0.f;
-    float plusScaleTarget = 0.f;
-    float plusScaleVel    = 0.f;
-    bool  plusVisible     = false;
-
-    // Panel morph animation
-    float panelMorphProgress = 1.0f;
-    bool  panelIsOpening     = false;
-    juce::Point<int> panelOriginPt;
-    int   panelTargetH       = 128;
 
     static constexpr float minFreq = 20.f;
     static constexpr float maxFreq = 20000.f;

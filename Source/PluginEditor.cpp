@@ -83,56 +83,8 @@ void EQCurveComponent::timerCallback()
         }
     }
 
-    // Spring physics for + button
-    auto spring = [](float& pos, float& vel, float target) {
-        const float stiff = 0.22f, damp = 0.6f;
-        vel += (target - pos) * stiff;
-        vel *= damp;
-        pos += vel;
-    };
-
-    spring (plusPos.x,  plusVel.x, plusTarget.x);
-    spring (plusPos.y,  plusVel.y, plusTarget.y);
-    spring (plusScale,  plusScaleVel, plusScaleTarget);
-
-    if (plusScale < 0.01f && plusScaleTarget < 0.01f)
-        plusVisible = false;
-
-    // Panel morph animation
-    if (popup->isVisible() && panelIsOpening && panelMorphProgress < 1.0f && !popup->userMoved)
-    {
-        panelMorphProgress = juce::jmin (1.0f, panelMorphProgress + 1.0f / 13.0f);
-        float ease = elasticEaseOut (panelMorphProgress);
-        int w = (int)juce::jmap (ease, 0.f, 1.f, 28.f, (float)BandPopupPanel::kW);
-        int h = (int)juce::jmap (ease, 0.f, 1.f, 28.f, (float)panelTargetH);
-        auto* par = getParentComponent();
-        int px = juce::jlimit (4, (par ? par->getWidth()  : 800) - BandPopupPanel::kW - 4,
-                               panelOriginPt.x - BandPopupPanel::kW / 2);
-        int py = juce::jlimit (4, (par ? par->getHeight() : 500) - h - 4,
-                               panelOriginPt.y - h - 12);
-        popup->setBounds (px, py, w, h);
-        popup->setAlpha (ease);
-        if (panelMorphProgress >= 1.0f)
-            panelIsOpening = false;
-    }
-
-    bool springActive = std::abs (plusScaleVel) > 0.001f
-                     || std::abs (plusVel.x)    > 0.1f
-                     || std::abs (plusVel.y)    > 0.1f;
-    bool morphActive  = popup->isVisible() && panelIsOpening;
-
-    if (needRepaint || springActive || morphActive)
+    if (needRepaint)
         repaint();
-}
-
-// ---- elastic ease out ----
-float EQCurveComponent::elasticEaseOut (float t) noexcept
-{
-    if (t <= 0.f) return 0.f;
-    if (t >= 1.f) return 1.f;
-    return std::pow (2.f, -10.f * t)
-         * std::sin ((t * 10.f - 0.75f) * (juce::MathConstants<float>::twoPi / 3.f))
-         + 1.f;
 }
 
 // ---- coordinate helpers ----
@@ -458,21 +410,30 @@ void EQCurveComponent::drawNodes (juce::Graphics& g)
         if (!p.enabled) continue;
 
         bool sel     = (b == selectedBand);
+        bool inGroup = isBandSelected (b);
         bool hovered = (b == hoveredBand);
         bool pinnedY = (p.type == LowPass || p.type == HighPass
                      || p.type == Notch   || p.type == BandPass);
 
         float x   = getXForFreq (p.freq);
         float y   = pinnedY ? getYForGain (0.f) : getYForGain (p.gainDb);
-        float r   = sel ? 8.f : 6.f;
+        float r   = (sel || inGroup) ? 8.f : 6.f;
         juce::Colour col = RvznColours::bandColour (b);
 
-        // Q indicator ring for selected band
-        if (sel)
+        // Q indicator ring — shown when band is selected (singular or in group)
+        if (sel || inGroup)
         {
             float qR = juce::jmap (p.q, 0.1f, 18.f, 18.f, 55.f);
             g.setColour (col.withAlpha (0.12f));
             g.drawEllipse (x - qR, y - qR * 0.4f, qR * 2.f, qR * 0.8f, 1.f);
+        }
+
+        // Selection ring for bands in the multi-selection group
+        if (inGroup && !sel)
+        {
+            const float gr = 11.f;
+            g.setColour (col.withAlpha (0.5f));
+            g.drawEllipse (x - gr, y - gr, gr * 2.f, gr * 2.f, 1.2f);
         }
 
         // Hover glow
@@ -530,20 +491,20 @@ void EQCurveComponent::paint (juce::Graphics& g)
     drawCurve (g);
     drawNodes (g);
     drawMSLegend (g);
+    drawLasso (g);
+}
 
-    // + button
-    if (plusVisible && plusScale > 0.01f)
-    {
-        const float r = 14.f * plusScale;
-        g.setColour (juce::Colour (0xFF1A1E28));
-        g.fillEllipse (plusPos.x - r, plusPos.y - r, r * 2.f, r * 2.f);
-        g.setColour (RvznColours::accentBlue.withAlpha (plusScale));
-        g.drawEllipse (plusPos.x - r, plusPos.y - r, r * 2.f, r * 2.f, 1.5f);
-        const float arm = 5.f * plusScale;
-        g.setColour (RvznColours::accentBlue.withAlpha (plusScale));
-        g.drawLine (plusPos.x - arm, plusPos.y, plusPos.x + arm, plusPos.y, 1.5f * plusScale);
-        g.drawLine (plusPos.x, plusPos.y - arm, plusPos.x, plusPos.y + arm, 1.5f * plusScale);
-    }
+void EQCurveComponent::drawLasso (juce::Graphics& g)
+{
+    if (! isLassoing) return;
+    float x = std::min (lassoStart.x, lassoCurrent.x);
+    float y = std::min (lassoStart.y, lassoCurrent.y);
+    float w = std::abs (lassoCurrent.x - lassoStart.x);
+    float h = std::abs (lassoCurrent.y - lassoStart.y);
+    g.setColour (RvznColours::accentBlue.withAlpha (0.10f));
+    g.fillRect (x, y, w, h);
+    g.setColour (RvznColours::accentBlue.withAlpha (0.7f));
+    g.drawRect (x, y, w, h, 1.f);
 }
 
 void EQCurveComponent::resized()
@@ -578,7 +539,7 @@ int EQCurveComponent::findFirstFreeBand() const
     return -1;
 }
 
-void EQCurveComponent::addBandAt (float freq, float gainDb)
+void EQCurveComponent::addBandAt (float freq, float gainDb, FilterType type)
 {
     int b = findFirstFreeBand();
     if (b < 0) return;
@@ -590,17 +551,32 @@ void EQCurveComponent::addBandAt (float freq, float gainDb)
     // Reset ALL params to known defaults — a recycled slot can carry stale
     // slope / mode / type from a previously-deleted band.
     setP ("freq",  freq);
-    setP ("gain",  gainDb);
+    setP ("gain",  (type == Bell || type == LowShelf || type == HighShelf) ? gainDb : 0.f);
     setP ("q",     1.f);
-    setP ("type",  (float) Bell);
+    setP ("type",  (float) type);
     setP ("slope", 1.f);   // 12 dB/oct
     setP ("mode",  (float) Stereo);
 
     auto* en = processor.apvts.getParameter (bandParamID (b, "enabled"));
     if (en) en->setValueNotifyingHost (1.f);
+}
 
+bool EQCurveComponent::isBandSelected (int b) const
+{
+    return std::find (selectedBands.begin(), selectedBands.end(), b) != selectedBands.end();
+}
+
+void EQCurveComponent::selectOnly (int b)
+{
+    selectedBands.clear();
+    if (b >= 0) selectedBands.push_back (b);
     selectedBand = b;
-    showPopupForBand (b);
+}
+
+void EQCurveComponent::clearSelection()
+{
+    selectedBands.clear();
+    selectedBand = -1;
 }
 
 void EQCurveComponent::removeBand (int b)
@@ -610,6 +586,8 @@ void EQCurveComponent::removeBand (int b)
     auto* gainParam = processor.apvts.getParameter (bandParamID (b, "gain"));
     if (gainParam) gainParam->setValueNotifyingHost (gainParam->convertTo0to1 (0.f));
 
+    selectedBands.erase (std::remove (selectedBands.begin(), selectedBands.end(), b),
+                        selectedBands.end());
     if (selectedBand == b) selectedBand = -1;
     dismissPopup();
     repaint();
@@ -623,14 +601,9 @@ void EQCurveComponent::showPopupForBand (int band)
     float nx = getXForFreq (p.freq);
     float ny = pinnedY ? getYForGain (0.f) : getYForGain (p.gainDb);
 
-    panelOriginPt    = { (int)nx, (int)ny };
-    panelMorphProgress = 0.0f;
-    panelIsOpening   = true;
-
-    popup->userMoved = false;  // reset — opening for a band always re-positions automatically
-    popup->setAlpha (0.0f);
-    popup->showForBand (band, panelOriginPt);
-    panelTargetH = popup->currentHeight();
+    popup->userMoved = false;  // opening for a band always re-positions automatically
+    popup->setAlpha (1.0f);
+    popup->showForBand (band, { (int)nx, (int)ny });
 }
 
 void EQCurveComponent::dismissPopup()
@@ -657,91 +630,76 @@ void EQCurveComponent::mouseMove (const juce::MouseEvent& e)
 {
     float mx = (float)e.x, my = (float)e.y;
 
-    // Update hovered band
-    int newHovered = -1;
-    for (int b = 0; b < NUM_BANDS; ++b)
-    {
-        auto p = processor.getBandParams (b);
-        if (!p.enabled) continue;
-        bool pinnedY = (p.type == LowPass || p.type == HighPass
-                     || p.type == Notch   || p.type == BandPass);
-        float nx = getXForFreq (p.freq);
-        float ny = pinnedY ? getYForGain (0.f) : getYForGain (p.gainDb);
-        if (std::hypot (mx - nx, my - ny) < 14.f) { newHovered = b; break; }
-    }
+    int newHovered = findHitNode (mx, my);
     if (newHovered != hoveredBand)
     {
         hoveredBand = newHovered;
         repaint();
     }
-
-    // Spring + button
-    bool nearNode = (findHitNode (mx, my) >= 0);
-    if (!nearNode && std::abs (my - getCurveYAtX (mx)) < 16.f)
-    {
-        plusTarget   = { mx, getCurveYAtX (mx) };
-        plusScaleTarget = 1.0f;
-        plusVisible  = true;
-    }
-    else
-    {
-        plusScaleTarget = 0.0f;
-    }
 }
 
 void EQCurveComponent::mouseExit (const juce::MouseEvent&)
 {
-    hoveredBand     = -1;
-    plusScaleTarget = 0.f;
+    if (hoveredBand != -1)
+    {
+        hoveredBand = -1;
+        repaint();
+    }
 }
 
 void EQCurveComponent::mouseDown (const juce::MouseEvent& e)
 {
     float mx = (float)e.x, my = (float)e.y;
 
-    // + button hit test
-    if (plusVisible && plusPos.getDistanceFrom (e.position.toFloat()) < 14.f * plusScale)
-    {
-        float freq = juce::jlimit (minFreq, maxFreq, getFreqForX (plusPos.x));
-        float gain = juce::jlimit (minGain, maxGain, getGainForY (plusPos.y));
-        addBandAt (freq, gain);
-        plusScaleTarget = 0.f;
-        return;
-    }
-
     int hit = findHitNode (mx, my);
 
     if (hit >= 0)
     {
-        selectedBand = hit;
-        draggingBand = hit;
-        isDragging   = true;
+        // If the band is already part of the multi-selection, drag the whole
+        // group. Otherwise, replace the selection with just this band.
+        if (! isBandSelected (hit))
+            selectOnly (hit);
+        else
+            selectedBand = hit;
+
+        draggingBand   = hit;
+        isDragging     = true;
         dragStartMouse = { mx, my };
-        auto p = processor.getBandParams (hit);
-        dragStartFreq = p.freq;
-        dragStartGain = p.gainDb;
-        showPopupForBand (hit);
+
+        multiDragRefs.clear();
+        for (int b : selectedBands)
+        {
+            auto p = processor.getBandParams (b);
+            multiDragRefs.push_back ({ b, p.freq, p.gainDb });
+            if (b == hit) { dragStartFreq = p.freq; dragStartGain = p.gainDb; }
+        }
+        repaint();
+        return;
     }
-    else if (popup->isVisible())
-    {
+
+    // Empty area: dismiss popup, clear selection, begin lasso
+    if (popup->isVisible())
         dismissPopup();
-    }
-    else if (!e.mods.isRightButtonDown())
+
+    if (! e.mods.isRightButtonDown())
     {
-        float freq = juce::jlimit (minFreq, maxFreq, getFreqForX (mx));
-        float gain = juce::jlimit (minGain, maxGain, getGainForY (my));
-        addBandAt (freq, gain);
-        draggingBand = selectedBand;
-        isDragging   = true;
-        dragStartMouse = { mx, my };
-        auto p2 = processor.getBandParams (selectedBand);
-        dragStartFreq = p2.freq;
-        dragStartGain = p2.gainDb;
+        clearSelection();
+        isLassoing   = true;
+        lassoStart   = { mx, my };
+        lassoCurrent = { mx, my };
+        repaint();
     }
 }
 
 void EQCurveComponent::mouseDrag (const juce::MouseEvent& e)
 {
+    if (isLassoing)
+    {
+        lassoCurrent = { (float)e.x, (float)e.y };
+        repaint();
+        return;
+    }
+
     if (!isDragging || draggingBand < 0) return;
 
     float dx = (float)(e.x - dragStartMouse.x);
@@ -749,68 +707,122 @@ void EQCurveComponent::mouseDrag (const juce::MouseEvent& e)
     float w  = (float)getWidth();
     float h  = (float)getHeight();
 
-    float normX = juce::jlimit (0.f, 1.f,
-        std::log (dragStartFreq / minFreq) / std::log (maxFreq / minFreq) + dx / w);
-    float newFreq = minFreq * std::pow (maxFreq / minFreq, normX);
-    float newGain = juce::jlimit (minGain, maxGain,
-        dragStartGain - dy * (maxGain - minGain) / h);
+    // Compute the normalized-frequency delta from the primary dragged band,
+    // then apply the same delta to every band in the multi-drag group so the
+    // group keeps its relative spacing.
+    const float logRange = std::log (maxFreq / minFreq);
+    const float startNormX = std::log (dragStartFreq / minFreq) / logRange;
+    const float desiredNormX = startNormX + dx / w;
+    const float gainDelta = -dy * (maxGain - minGain) / h;
 
-    auto setParam = [&] (const char* name, float v) {
-        auto* param = processor.apvts.getParameter (bandParamID (draggingBand, name));
+    auto setParam = [&] (int band, const char* name, float v) {
+        auto* param = processor.apvts.getParameter (bandParamID (band, name));
         if (param) param->setValueNotifyingHost (param->convertTo0to1 (v));
     };
-    setParam ("freq", newFreq);
-    setParam ("gain", newGain);
+
+    // If any band would clip the freq range, clamp the whole group's normX
+    // shift so spacing is preserved.
+    float clampedNormDelta = desiredNormX - startNormX;
+    for (const auto& ref : multiDragRefs)
+    {
+        float refNormX = std::log (ref.startFreq / minFreq) / logRange;
+        float newNormX = refNormX + clampedNormDelta;
+        if (newNormX < 0.f) clampedNormDelta -= newNormX;
+        if (newNormX > 1.f) clampedNormDelta -= (newNormX - 1.f);
+    }
+
+    float clampedGainDelta = gainDelta;
+    for (const auto& ref : multiDragRefs)
+    {
+        float newG = ref.startGain + clampedGainDelta;
+        if (newG < minGain) clampedGainDelta += (minGain - newG);
+        if (newG > maxGain) clampedGainDelta -= (newG - maxGain);
+    }
+
+    for (const auto& ref : multiDragRefs)
+    {
+        float refNormX = std::log (ref.startFreq / minFreq) / logRange;
+        float newNormX = juce::jlimit (0.f, 1.f, refNormX + clampedNormDelta);
+        float newFreq  = minFreq * std::pow (maxFreq / minFreq, newNormX);
+        float newGain  = juce::jlimit (minGain, maxGain, ref.startGain + clampedGainDelta);
+        setParam (ref.band, "freq", newFreq);
+        setParam (ref.band, "gain", newGain);
+    }
 
     updatePopupPosition();
 }
 
 void EQCurveComponent::mouseUp (const juce::MouseEvent&)
 {
-    isDragging = false; draggingBand = -1;
+    if (isLassoing)
+    {
+        float x0 = std::min (lassoStart.x, lassoCurrent.x);
+        float y0 = std::min (lassoStart.y, lassoCurrent.y);
+        float x1 = std::max (lassoStart.x, lassoCurrent.x);
+        float y1 = std::max (lassoStart.y, lassoCurrent.y);
+
+        // Only treat as a real lasso if the user actually dragged.
+        if ((x1 - x0) > 3.f || (y1 - y0) > 3.f)
+        {
+            selectedBands.clear();
+            for (int b = 0; b < NUM_BANDS; ++b)
+            {
+                auto p = processor.getBandParams (b);
+                if (!p.enabled) continue;
+                bool pinnedY = (p.type == LowPass || p.type == HighPass
+                             || p.type == Notch   || p.type == BandPass);
+                float nx = getXForFreq (p.freq);
+                float ny = pinnedY ? getYForGain (0.f) : getYForGain (p.gainDb);
+                if (nx >= x0 && nx <= x1 && ny >= y0 && ny <= y1)
+                    selectedBands.push_back (b);
+            }
+            selectedBand = selectedBands.empty() ? -1 : selectedBands.front();
+        }
+
+        isLassoing = false;
+        repaint();
+    }
+
+    isDragging   = false;
+    draggingBand = -1;
+    multiDragRefs.clear();
 }
 
-void EQCurveComponent::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
+void EQCurveComponent::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
 {
-    if (selectedBand < 0) return;
-    auto* p = processor.apvts.getParameter (bandParamID (selectedBand, "q"));
+    // Q is changed by hovering a node and scrolling — resolve hit from the
+    // current cursor position rather than the cached hover band so a fast
+    // move-then-scroll still hits the right node.
+    int hit = findHitNode ((float)e.x, (float)e.y);
+    if (hit < 0) return;
+    auto* p = processor.apvts.getParameter (bandParamID (hit, "q"));
     if (p) p->setValueNotifyingHost (juce::jlimit (0.f, 1.f, p->getValue() + w.deltaY * 0.06f));
 }
 
 void EQCurveComponent::mouseDoubleClick (const juce::MouseEvent& e)
 {
-    const float clickFreq = getFreqForX ((float)e.x);
-    const bool  inLowCut  = clickFreq < 50.f;
-    const bool  inHighCut = clickFreq > 18000.f;
+    const float mx = (float)e.x, my = (float)e.y;
 
-    if (inLowCut || inHighCut)
+    int hit = findHitNode (mx, my);
+    if (hit >= 0)
     {
-        // The first click of the double-click already added a Bell band via
-        // mouseDown — convert it into the appropriate cut filter.
-        int hit = findHitNode ((float)e.x, (float)e.y);
-        if (hit < 0) hit = selectedBand;
-        if (hit < 0) return;
-
-        const FilterType newType = inLowCut ? HighPass : LowPass;
-        const float      newFreq = inLowCut ? 50.f     : 18000.f;
-
-        auto setP = [&] (const char* name, float v) {
-            auto* param = processor.apvts.getParameter (bandParamID (hit, name));
-            if (param) param->setValueNotifyingHost (param->convertTo0to1 (v));
-        };
-        setP ("type", (float) newType);
-        setP ("freq", newFreq);
-        setP ("gain", 0.f);
-        updatePopupPosition();
+        // Double-click on a node → open the band popup.
+        selectOnly (hit);
+        showPopupForBand (hit);
+        repaint();
         return;
     }
 
-    int hit = findHitNode ((float)e.x, (float)e.y);
-    if (hit >= 0)
-    {
-        auto* gp = processor.apvts.getParameter (bandParamID (hit, "gain"));
-        if (gp) gp->setValueNotifyingHost (gp->convertTo0to1 (0.f));
-    }
+    // Double-click on empty area → add a band at the cursor position.
+    const float clickFreq = juce::jlimit (minFreq, maxFreq, getFreqForX (mx));
+    const float clickGain = juce::jlimit (minGain, maxGain, getGainForY (my));
+
+    const bool inLowCut  = clickFreq < 50.f;
+    const bool inHighCut = clickFreq > 18000.f;
+
+    if (inLowCut)       addBandAt (50.f,    0.f, HighPass);
+    else if (inHighCut) addBandAt (18000.f, 0.f, LowPass);
+    else                addBandAt (clickFreq, clickGain, Bell);
 }
 
 //==============================================================================
