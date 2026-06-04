@@ -9,12 +9,14 @@ namespace
 
     juce::String buildRequestBody (const juce::String& email,
                                    const juce::String& licenseKey,
-                                   const juce::String& deviceId)
+                                   const juce::String& deviceId,
+                                   const juce::String& productCode)
     {
         auto* obj = new juce::DynamicObject();
-        obj->setProperty ("email",       email);
-        obj->setProperty ("license_key", licenseKey);
-        obj->setProperty ("device_id",   deviceId);
+        obj->setProperty ("email",        email);
+        obj->setProperty ("license_key",  licenseKey);
+        obj->setProperty ("device_id",    deviceId);
+        obj->setProperty ("product_code", productCode);
         juce::var v (obj);
         return juce::JSON::toString (v, true);
     }
@@ -206,14 +208,14 @@ void LicenseManager::setEmail (juce::String s)
 VerifyResult LicenseManager::verifyBlocking (const juce::String& email,
                                              const juce::String& key) const
 {
-    auto body = buildRequestBody (email, key, getDeviceId());
+    auto body = buildRequestBody (email, key, getDeviceId(), productCode);
     return postJson (verifyUrl, body);
 }
 
 VerifyResult LicenseManager::deactivateBlocking (const juce::String& email,
                                                  const juce::String& key) const
 {
-    auto body = buildRequestBody (email, key, getDeviceId());
+    auto body = buildRequestBody (email, key, getDeviceId(), productCode);
     return postJson (deactivateUrl, body);
 }
 
