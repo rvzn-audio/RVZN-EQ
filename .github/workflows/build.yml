@@ -1,8 +1,6 @@
 name: Build Plugin
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
 
 env:
@@ -143,74 +141,3 @@ jobs:
         with:
           name: RVZN-EQUALIZER-macOS-Installer
           path: "RVZN V1 EQUALIZER.pkg"
-
-  publish:
-    name: Publish release to rvzn-audio.com
-    needs: [windows, macos]
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: RVZN-EQUALIZER-macOS-Installer
-          path: dist/macos
-
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: RVZN-EQUALIZER-Windows-VST3
-          path: dist/windows-vst3
-
-      - name: Build changelog + Windows zip
-        id: prep
-        run: |
-          set -e
-          version="${GITHUB_REF_NAME#v}"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-          prev_tag=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
-          if [ -n "$prev_tag" ]; then
-            git log --pretty=format:"- %s" "$prev_tag..${GITHUB_REF_NAME}" > changelog.txt
-          else
-            git log --pretty=format:"- %s" "${GITHUB_REF_NAME}" > changelog.txt
-          fi
-          if [ ! -s changelog.txt ]; then
-            echo "- Release $version" > changelog.txt
-          fi
-
-          (cd dist/windows-vst3 && zip -r "../RVZN-EQUALIZER-${version}-Windows.zip" .)
-
-      - name: Upload macOS installer
-        env:
-          API_TOKEN: ${{ secrets.RVZN_AUDIO_TOKEN }}
-        run: |
-          set -e
-          pkg=$(find dist/macos -name "*.pkg" -print -quit)
-          if [ -z "$pkg" ]; then echo "No .pkg in dist/macos" >&2; exit 1; fi
-          curl --fail-with-body -X POST \
-            -H "Authorization: Bearer $API_TOKEN" \
-            -F "version=${{ steps.prep.outputs.version }}" \
-            -F "platform=macos" \
-            -F "label=macOS Installer (.pkg)" \
-            -F "changelog=<changelog.txt" \
-            -F "file=@${pkg}" \
-            "https://rvzn-audio.com/api/admin/products/RVZN_EQ/releases"
-
-      - name: Upload Windows VST3 zip
-        env:
-          API_TOKEN: ${{ secrets.RVZN_AUDIO_TOKEN }}
-        run: |
-          set -e
-          curl --fail-with-body -X POST \
-            -H "Authorization: Bearer $API_TOKEN" \
-            -F "version=${{ steps.prep.outputs.version }}" \
-            -F "platform=windows" \
-            -F "label=Windows VST3 (zip)" \
-            -F "changelog=<changelog.txt" \
-            -F "file=@dist/RVZN-EQUALIZER-${{ steps.prep.outputs.version }}-Windows.zip" \
-            "https://rvzn-audio.com/api/admin/products/RVZN_EQ/releases"
